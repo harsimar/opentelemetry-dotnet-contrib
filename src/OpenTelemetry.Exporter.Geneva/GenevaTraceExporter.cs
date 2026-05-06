@@ -16,8 +16,9 @@ public class GenevaTraceExporter : GenevaBaseExporter<Activity>
 {
     internal readonly bool IsUsingUnixDomainSocket;
 
+    internal readonly IDisposable Exporter;
+
     private readonly ExportActivityFunc exportActivity;
-    private readonly IDisposable exporter;
 
     private bool isDisposed;
 
@@ -68,17 +69,23 @@ public class GenevaTraceExporter : GenevaBaseExporter<Activity>
 
         if (useMsgPackExporter)
         {
-            var msgPackTraceExporter = new MsgPackTraceExporter(options, this.ParentProvider.GetResource);
+#pragma warning disable IDE0200 // Remove unnecessary lambda expression
+            var msgPackTraceExporter = new MsgPackTraceExporter(options, () =>
+            {
+                // this is not equivalent to passing a method reference, because the ParentProvider could change after the constructor.
+                return this.ParentProvider.GetResource();
+            });
+#pragma warning restore IDE0200 // Remove unnecessary lambda expression
             this.IsUsingUnixDomainSocket = msgPackTraceExporter.IsUsingUnixDomainSocket;
             this.exportActivity = msgPackTraceExporter.Export;
-            this.exporter = msgPackTraceExporter;
+            this.Exporter = msgPackTraceExporter;
         }
         else
         {
             var tldTraceExporter = new TldTraceExporter(options);
             this.IsUsingUnixDomainSocket = false;
             this.exportActivity = tldTraceExporter.Export;
-            this.exporter = tldTraceExporter;
+            this.Exporter = tldTraceExporter;
         }
     }
 
@@ -86,9 +93,7 @@ public class GenevaTraceExporter : GenevaBaseExporter<Activity>
 
     /// <inheritdoc/>
     public override ExportResult Export(in Batch<Activity> batch)
-    {
-        return this.exportActivity(in batch);
-    }
+        => this.exportActivity(in batch);
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
@@ -102,7 +107,7 @@ public class GenevaTraceExporter : GenevaBaseExporter<Activity>
         {
             try
             {
-                this.exporter.Dispose();
+                this.Exporter.Dispose();
             }
             catch (Exception ex)
             {

@@ -1,9 +1,17 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#if NETFRAMEWORK
+using System.Net.Http;
+#endif
+
+using System.Net;
+using System.Text;
 using OpAmp.Proto.V1;
 using OpenTelemetry.OpAmp.Client.Internal.Services.Heartbeat;
+using OpenTelemetry.OpAmp.Client.Messages;
 using OpenTelemetry.OpAmp.Client.Settings;
+using OpenTelemetry.OpAmp.Client.Tests.DataGenerators;
 using OpenTelemetry.OpAmp.Client.Tests.Mocks;
 using OpenTelemetry.OpAmp.Client.Tests.Tools;
 using Xunit;
@@ -12,6 +20,68 @@ namespace OpenTelemetry.OpAmp.Client.Tests;
 
 public class OpAmpClientTests
 {
+    [Fact]
+    public async Task OpAmpClient_PublicMethodsThrowAfterDispose()
+    {
+        using var listener = new MockListener();
+        var client = new OpAmpClient(o => o.Heartbeat.IsEnabled = false);
+        var configFile = new EffectiveConfigFile(Encoding.UTF8.GetBytes("test"), "plain/text", "config.txt");
+
+        client.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => client.Subscribe(listener));
+        Assert.Throws<ObjectDisposedException>(() => client.Unsubscribe(listener));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.StartAsync());
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.StopAsync());
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.SendEffectiveConfigAsync([configFile]));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.SendCustomCapabilitiesAsync(["capability"]));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.SendCustomMessageAsync("capability", "type", Encoding.UTF8.GetBytes("payload")));
+    }
+
+    [Fact]
+    public void OpAmpClient_DisposeDisposesHttpTransportCreatedByFactory()
+    {
+        var handler = new TrackingHttpMessageHandler();
+
+        var client = new OpAmpClient(o =>
+        {
+            o.ServerUrl = new Uri("http://localhost:4318");
+            o.Heartbeat.IsEnabled = false;
+            o.HttpClientFactory = () => new HttpClient(handler);
+        });
+
+        client.Dispose();
+
+        Assert.True(handler.Disposed);
+    }
+
+    [Fact]
+    public async Task OpAmpClient_DisposeDisposesWebSocketTransportWithoutStop()
+    {
+        using var opAmpServer = new OpAmpFakeWebSocketServer(useSmallPackets: false);
+
+        var client = new OpAmpClient(o =>
+        {
+            o.ConnectionType = ConnectionType.WebSocket;
+            o.ServerUrl = opAmpServer.Endpoint;
+            o.Heartbeat.IsEnabled = false;
+        });
+
+        await client.StartAsync();
+
+        var disposeTask = Task.Run(client.Dispose);
+        var timeout = TimeSpan.FromSeconds(5);
+
+#if NET
+        await disposeTask.WaitAsync(timeout);
+#else
+        using var cts = new CancellationTokenSource(timeout);
+        var completedTask = await Task.WhenAny(disposeTask, Task.Delay(timeout, cts.Token));
+        Assert.Same(disposeTask, completedTask);
+        await disposeTask;
+#endif
+    }
+
     [Fact]
     public async Task OpAmpClient_SubscribeAndUnsubscribe()
     {
@@ -60,7 +130,9 @@ public class OpAmpClientTests
             Status = "OK",
         });
 
-        mockListener.WaitForMessages(TimeSpan.FromSeconds(1));
+        // Listener was unsubscribed; wait briefly to let the server process the frame,
+        // but do not assert a message arrives.
+        mockListener.TryWaitForMessage(TimeSpan.FromSeconds(1));
 
         var serverFrames = opAmpServer.GetFrames();
 
@@ -105,7 +177,9 @@ public class OpAmpClientTests
     }
 
     [Theory]
+#pragma warning disable xUnit1044 // Avoid using TheoryData type arguments that are not serializable
     [ClassData(typeof(CapabilityTestData))]
+#pragma warning restore xUnit1044 // Avoid using TheoryData type arguments that are not serializable
     internal async Task SendsExpectedCapabilities(
         Action<OpAmpClientSettings> configure,
         IEnumerable<AgentCapabilities> expectedCapabilities,
@@ -141,6 +215,175 @@ public class OpAmpClientTests
         await client.StopAsync();
     }
 
+    [Fact]
+    internal async Task SendsEffectiveConfigFile_IsDisabledAndThrows()
+    {
+        // Setup OpAMP server
+        using var opAmpServer = new OpAmpFakeHttpServer(false);
+        var opAmpEndpoint = opAmpServer.Endpoint;
+
+        using var client = new OpAmpClient(o =>
+        {
+            o.ServerUrl = opAmpEndpoint;
+        });
+
+        // Setup OpAMP content
+        var configFileContents = Encoding.UTF8.GetBytes("test");
+        var configFile = new EffectiveConfigFile(configFileContents, "plain/text", "my-configuration-file.txt");
+
+        // Act
+        await client.StartAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SendEffectiveConfigAsync([configFile]));
+        await client.StopAsync();
+    }
+
+    [Fact]
+    internal async Task SendsEffectiveConfigFile_FromMemory()
+    {
+        // Setup OpAMP server
+        using var opAmpServer = new OpAmpFakeHttpServer(false);
+        var opAmpEndpoint = opAmpServer.Endpoint;
+
+        using var client = new OpAmpClient(o =>
+        {
+            o.ServerUrl = opAmpEndpoint;
+            o.EffectiveConfigurationReporting.EnableReporting = true;
+        });
+
+        // Setup OpAMP content
+        const string fileName = "my-configuration-file.json";
+        const string fileContentType = "application/json";
+        const string fileContent =
+            """
+            {
+                "version": 1.0,
+                "name": "my-configuration",
+                "is-active": true
+            }
+            """;
+        var configFileContents = Encoding.UTF8.GetBytes(fileContent);
+        var configFile = new EffectiveConfigFile(configFileContents, fileContentType, fileName);
+
+        // Act
+        await client.StartAsync();
+        await client.SendEffectiveConfigAsync([configFile]);
+        await client.StopAsync();
+
+        // Assert received frames
+        var frames = opAmpServer.GetFrames();
+        var actualConfig = frames[1].EffectiveConfig.ConfigMap.ConfigMap[fileName];
+        var actualContent = actualConfig.Body.ToStringUtf8();
+
+        Assert.Equal(3, frames.Count); // 3 frames: 1 identification, 2 effective config, 3 disconnect
+        Assert.Equal(fileContent, actualContent);
+        Assert.Equal(fileContentType, actualConfig.ContentType);
+    }
+
+    [Fact]
+    internal async Task SendsEffectiveConfigFile_FromFile()
+    {
+        // Setup OpAMP server
+        using var opAmpServer = new OpAmpFakeHttpServer(false);
+        var opAmpEndpoint = opAmpServer.Endpoint;
+
+        using var client = new OpAmpClient(o =>
+        {
+            o.ServerUrl = opAmpEndpoint;
+            o.EffectiveConfigurationReporting.EnableReporting = true;
+        });
+
+        // Setup OpAMP content
+        const string fileContentType = "application/json";
+        const string fileContent =
+            """
+            {
+                "version": 1.0,
+                "name": "my-configuration",
+                "is-active": true
+            }
+            """;
+        using var tempConfigFile = TempFile.Create(fileContent);
+        using var stream = File.OpenRead(tempConfigFile.FilePath);
+        var configFile = EffectiveConfigFile.CreateFromStream(stream, fileContentType, tempConfigFile.FileName, 512 * 1024);
+
+        // Act
+        await client.StartAsync();
+        await client.SendEffectiveConfigAsync([configFile]);
+        await client.StopAsync();
+
+        // Assert received frames
+        var frames = opAmpServer.GetFrames();
+        var actualConfig = frames[1].EffectiveConfig.ConfigMap.ConfigMap[tempConfigFile.FileName];
+        var actualContent = actualConfig.Body.ToStringUtf8();
+
+        Assert.Equal(3, frames.Count); // 3 frames: 1 identification, 2 effective config, 3 disconnect
+        Assert.Equal(fileContent, actualContent);
+        Assert.Equal(fileContentType, actualConfig.ContentType);
+    }
+
+    [Fact]
+    internal async Task SendsCustomCapabilities()
+    {
+        // Setup OpAMP server
+        using var opAmpServer = new OpAmpFakeHttpServer(false);
+        var opAmpEndpoint = opAmpServer.Endpoint;
+
+        using var client = new OpAmpClient(o =>
+        {
+            o.ServerUrl = opAmpEndpoint;
+        });
+
+        // Setup content
+        string[] capabilities = ["custom-c1", "custom-c2", "custom-c3"];
+
+        // Act
+        await client.StartAsync();
+        await client.SendCustomCapabilitiesAsync(capabilities);
+        await client.StopAsync();
+
+        // Assert received frames
+        var frames = opAmpServer.GetFrames();
+        var actualCapabilities = frames[1].CustomCapabilities.Capabilities;
+
+        Assert.Equal(3, frames.Count); // 3 frames: 1 identification, 2 custom capabilities, 3 disconnect
+        Assert.Equal(capabilities, actualCapabilities);
+    }
+
+    [Fact]
+    internal async Task SendsCustomMessage()
+    {
+        // Setup OpAMP server
+        using var opAmpServer = new OpAmpFakeHttpServer(false);
+        var opAmpEndpoint = opAmpServer.Endpoint;
+
+        using var client = new OpAmpClient(o =>
+        {
+            o.ServerUrl = opAmpEndpoint;
+        });
+
+        // Setup content
+        const string capability = "custom-c1";
+        const string type = "custom-type-1";
+        const string messageContent = "a custom message contents";
+        var message = Encoding.UTF8.GetBytes(messageContent);
+
+        // Act
+        await client.StartAsync();
+        await client.SendCustomMessageAsync(capability, type, message);
+        await client.StopAsync();
+
+        // Assert received frames
+        var frames = opAmpServer.GetFrames();
+        var actualCapability = frames[1].CustomMessage.Capability;
+        var actualType = frames[1].CustomMessage.Type;
+        var actualMessageContent = frames[1].CustomMessage.Data.ToStringUtf8();
+
+        Assert.Equal(3, frames.Count); // 3 frames: 1 identification, 2 custom message, 3 disconnect
+        Assert.Equal(capability, actualCapability);
+        Assert.Equal(type, actualType);
+        Assert.Equal(messageContent, actualMessageContent);
+    }
+
     internal class CapabilityTestData
         : TheoryData<Action<OpAmpClientSettings>, IEnumerable<AgentCapabilities>, IEnumerable<AgentCapabilities>>
     {
@@ -150,6 +393,33 @@ public class OpAmpClientTests
             this.Add(o => o.Heartbeat.IsEnabled = true, [AgentCapabilities.ReportsHeartbeat, AgentCapabilities.ReportsHealth], []);
             this.Add(o => o.RemoteConfiguration.AcceptsRemoteConfig = true, [AgentCapabilities.AcceptsRemoteConfig], []);
             this.Add(o => o.RemoteConfiguration.AcceptsRemoteConfig = false, [], [AgentCapabilities.AcceptsRemoteConfig]);
+            this.Add(o => o.EffectiveConfigurationReporting.EnableReporting = true, [AgentCapabilities.ReportsEffectiveConfig], []);
+            this.Add(o => o.EffectiveConfigurationReporting.EnableReporting = false, [], [AgentCapabilities.ReportsEffectiveConfig]);
+        }
+    }
+
+    private sealed class TrackingHttpMessageHandler : HttpMessageHandler
+    {
+        public bool Disposed { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent([]),
+            };
+
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                this.Disposed = true;
+            }
+
+            base.Dispose(disposing);
         }
     }
 }

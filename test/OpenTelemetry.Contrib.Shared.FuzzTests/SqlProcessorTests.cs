@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using FsCheck;
 using FsCheck.Xunit;
 using Xunit;
@@ -153,6 +154,21 @@ public static class SqlProcessorTests
     }
 
     [Property(MaxTest = MaxValue)]
+    public static void GetSanitizedSql_SqlStatement_AlignedToArrayPoolBuckets_DoesNotThrow(PositiveInt seed)
+    {
+        // Choose statement lengths that align with common ArrayPool buckets. Before the fix,
+        // these lengths can make the initial summary slice exactly as long as the SQL text.
+        var sqlLength = 1 << ((seed.Get % 5) + 4);
+        var prefix = "CREATE TABLE ";
+        var identifier = new string('X', sqlLength - prefix.Length);
+        var sql = prefix + identifier;
+
+        var exception = Record.Exception(() => SqlProcessor.GetSanitizedSql(sql));
+
+        Assert.Null(exception);
+    }
+
+    [Property(MaxTest = MaxValue)]
     public static void GetSanitizedSql_In_Clause_Optimizes_Sanitization(PositiveInt input)
     {
         // Arrange
@@ -215,7 +231,7 @@ public static class SqlProcessorTests
     public static void GetSanitizedSql_Scientific_Notation_Is_Sanitized(int exponent)
     {
         // Arrange
-        if (exponent < -10 || exponent > 10)
+        if (exponent is < -10 or > 10)
         {
             return;
         }
@@ -361,5 +377,39 @@ public static class SqlProcessorTests
         // IN clause optimization should replace all values with single ?
         var questionMarkCount = result.SanitizedSql.Count((p) => p == '?');
         Assert.Equal(1, questionMarkCount);
+    }
+
+    [Property(MaxTest = MaxValue)]
+    public static void GetSanitizedSql_Unterminated_Escaped_Identifier_In_From_Clause_Sanitizes_Following_Literals(
+        NonEmptyString input,
+        PositiveInt number,
+        NonNegativeInt variant)
+    {
+        // Arrange
+        var secret = "secret_" + new string([.. input.Get.Where(char.IsLetterOrDigit).Take(32)]);
+        if (secret.Length == "secret_".Length)
+        {
+            secret += "value";
+        }
+
+        var numericLiteral = number.Get + 100_000;
+        var numericLiteralString = numericLiteral.ToString(CultureInfo.InvariantCulture);
+        var sqlPrefix = (variant.Get % 3) switch
+        {
+            0 => "SELECT * FROM [Orders",
+            1 => "SELECT * FROM dbo.[Orders",
+            _ => "SELECT * FROM Customers, [Orders",
+        };
+
+        var sql = $"{sqlPrefix} WHERE Name = '{secret}' AND Id = {numericLiteralString} AND Token = 0xDEADBEEF";
+
+        // Act
+        var result = SqlProcessor.GetSanitizedSql(sql);
+
+        // Assert
+        Assert.Contains("?", result.SanitizedSql);
+        Assert.DoesNotContain(secret, result.SanitizedSql);
+        Assert.DoesNotContain(numericLiteralString, result.SanitizedSql);
+        Assert.DoesNotContain("DEADBEEF", result.SanitizedSql);
     }
 }

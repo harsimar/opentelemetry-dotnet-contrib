@@ -1,21 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+using OpenTelemetry.Tests;
 using Testcontainers.PostgreSql;
-using Xunit;
 
 namespace OpenTelemetry.Instrumentation.EntityFrameworkCore.Tests;
 
-public sealed class PostgresIntegrationTestsFixture : IAsyncLifetime
+public sealed class PostgresIntegrationTestsFixture : XunitContainerFixture<PostgreSqlContainer>
 {
-    public PostgreSqlContainer DatabaseContainer { get; } = CreatePostgres();
+    protected override string DockerfileName => "postgres.Dockerfile";
 
-    public Task InitializeAsync()
-        => this.DatabaseContainer.StartAsync();
-
-    public Task DisposeAsync()
-        => this.DatabaseContainer.DisposeAsync().AsTask();
-
-    private static PostgreSqlContainer CreatePostgres()
-        => new PostgreSqlBuilder().Build();
+    protected override PostgreSqlContainer CreateContainer() => new PostgreSqlBuilder(this.GetImage()).Build();
 }

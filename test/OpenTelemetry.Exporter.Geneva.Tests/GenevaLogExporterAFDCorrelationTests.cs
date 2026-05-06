@@ -4,7 +4,6 @@
 #nullable disable
 
 using System.Net.Sockets;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Context;
@@ -65,14 +64,34 @@ public class GenevaLogExporterAFDCorrelationTests
             // Create a test exporter
             using var exporter = new GenevaLogExporter(exporterOptions);
 
+            List<string> exportedCorrelationIds = [];
+            var foundWithoutCorrelationIds = 0;
+            (exporter.Exporter as MsgPackLogExporter).DataTransportListener = (data) =>
+            {
+                var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(data, MessagePack.Resolvers.ContractlessStandardResolver.Options);
+                var signal = (fluentdData as object[])[0] as string;
+                var TimeStampAndMappings = ((fluentdData as object[])[1] as object[])[0];
+                var mapping = (TimeStampAndMappings as object[])[1] as Dictionary<object, object>;
+
+                if (mapping.ContainsKey("AFDCorrelationId"))
+                {
+                    exportedCorrelationIds.Add(mapping["AFDCorrelationId"] as string);
+                }
+                else
+                {
+                    foundWithoutCorrelationIds++;
+                }
+            };
+
             // Now create multiple threads to simulate concurrent access
             var logger = loggerFactory.CreateLogger<GenevaLogExporterTests>();
             const int threadCount = 10;
             var threads = new Thread[threadCount];
             var countWithCorrelationId = 0;
+            List<string> expectedCorrelationIds = [];
             var countWithoutCorrelationId = 0;
 
-            for (int i = 0; i < threadCount; i++)
+            for (var i = 0; i < threadCount; i++)
             {
                 var threadIndex = i;
                 threads[i] = new Thread(() =>
@@ -80,65 +99,30 @@ public class GenevaLogExporterAFDCorrelationTests
                     if (threadIndex % 2 == 0)
                     {
                         // This thread sets AFDCorrelationId before logging
-                        var actualCorrelationId = $"CorrelationId-{threadIndex}";
-                        OpenTelemetryContext.SetAFDCorrelationId(actualCorrelationId);
+                        var expectedCorrelationId = $"CorrelationId-{threadIndex}";
+                        OpenTelemetryContext.SetAFDCorrelationId(expectedCorrelationId);
+#pragma warning disable CA1873 // Avoid potentially expensive logging
 #pragma warning disable CA2254 // Template should be a static expression
                         logger.LogInformation($"Thread {threadIndex} with correlation ID");
 #pragma warning restore CA2254 // Template should be a static expression
+#pragma warning restore CA1873 // Avoid potentially expensive logging
                         lock (syncObj)
                         {
                             countWithCorrelationId++;
+                            expectedCorrelationIds.Add(expectedCorrelationId);
                         }
-
-                        byte[] serializedData;
-                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                        {
-                            serializedData = MsgPackLogExporter.Buffer.Value;
-                        }
-                        else
-                        {
-                            // Read the data sent via socket.
-                            serializedData = new byte[65360];
-                            _ = receiverSocket.Receive(serializedData);
-                        }
-
-                        var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(serializedData, MessagePack.Resolvers.ContractlessStandardResolver.Options);
-                        var signal = (fluentdData as object[])[0] as string;
-                        var TimeStampAndMappings = ((fluentdData as object[])[1] as object[])[0];
-                        var mapping = (TimeStampAndMappings as object[])[1] as Dictionary<object, object>;
-
-                        var expectedCorrelationId = mapping["AFDCorrelationId"] as string;
-                        Assert.Equal(actualCorrelationId, expectedCorrelationId);
                     }
                     else
                     {
+#pragma warning disable CA1873 // Avoid potentially expensive logging
 #pragma warning disable CA2254 // Template should be a static expression
                         logger.LogInformation($"Thread {threadIndex} without correlation ID");
 #pragma warning restore CA2254 // Template should be a static expression
+#pragma warning restore CA1873 // Avoid potentially expensive logging
                         lock (syncObj)
                         {
                             countWithoutCorrelationId++;
                         }
-
-                        byte[] serializedData;
-                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                        {
-                            serializedData = MsgPackLogExporter.Buffer.Value;
-                        }
-                        else
-                        {
-                            // Read the data sent via socket
-                            serializedData = new byte[65360];
-                            _ = receiverSocket.Receive(serializedData);
-                        }
-
-                        var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(serializedData, MessagePack.Resolvers.ContractlessStandardResolver.Options);
-                        var signal = (fluentdData as object[])[0] as string;
-                        var TimeStampAndMappings = ((fluentdData as object[])[1] as object[])[0];
-                        var mapping = (TimeStampAndMappings as object[])[1] as Dictionary<object, object>;
-
-                        // Verify that AFDCorrelationId is not present in the serialized data
-                        Assert.False(mapping.ContainsKey("AFDCorrelationId"));
                     }
                 });
             }
@@ -159,6 +143,9 @@ public class GenevaLogExporterAFDCorrelationTests
             Assert.Equal(threadCount, exportedItems.Count);
             Assert.Equal(threadCount / 2, countWithCorrelationId);
             Assert.Equal(threadCount / 2, countWithoutCorrelationId);
+
+            Assert.Equal(expectedCorrelationIds, exportedCorrelationIds);
+            Assert.Equal(countWithoutCorrelationId, foundWithoutCorrelationIds);
 
             // Check that no exceptions were thrown
             // If our implementation is correct, logs from threads without correlation ID
@@ -205,15 +192,19 @@ public class GenevaLogExporterAFDCorrelationTests
 
             var exportedItems = new List<LogRecord>();
 
+            using var exporter = new GenevaLogExporter(exporterOptions);
+
             using var loggerFactory = LoggerFactory.Create(builder => builder
                 .AddOpenTelemetry(options =>
                 {
                     options.IncludeScopes = true;
                     options.AddInMemoryExporter(exportedItems);
-                    options.AddGenevaLogExporter(options =>
-                    {
-                        options.ConnectionString = exporterOptions.ConnectionString;
-                    });
+                    options.AddProcessor(sp =>
+                                new CompositeProcessor<LogRecord>(
+                                [
+                                    new AFDCorrelationIdLogProcessor(),
+                                    new ReentrantExportProcessor<LogRecord>(exporter),
+                                ]));
                 }));
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -222,26 +213,17 @@ public class GenevaLogExporterAFDCorrelationTests
                 receiverSocket.ReceiveTimeout = 10000;
             }
 
-            // Create a test exporter to get MessagePack byte data for validation
-            using var exporter = new GenevaLogExporter(exporterOptions);
+            List<ArraySegment<byte>> exportedData = [];
+            (exporter.Exporter as MsgPackLogExporter).DataTransportListener = exportedData.Add;
 
             // In this test, AFDCorrelationId is not set in RuntimeContext
             var logger = loggerFactory.CreateLogger<GenevaLogExporterTests>();
             logger.LogInformation("No correlation ID should be present");
+            loggerFactory.Dispose();
 
-            byte[] serializedData;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                serializedData = MsgPackLogExporter.Buffer.Value;
-            }
-            else
-            {
-                // Read the data sent via socket
-                serializedData = new byte[65360];
-                _ = receiverSocket.Receive(serializedData);
-            }
+            Assert.Single(exportedData);
 
-            var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(serializedData, MessagePack.Resolvers.ContractlessStandardResolver.Options);
+            var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(exportedData[0], MessagePack.Resolvers.ContractlessStandardResolver.Options);
             var signal = (fluentdData as object[])[0] as string;
             var TimeStampAndMappings = ((fluentdData as object[])[1] as object[])[0];
             var mapping = (TimeStampAndMappings as object[])[1] as Dictionary<object, object>;
@@ -296,15 +278,19 @@ public class GenevaLogExporterAFDCorrelationTests
 
             var exportedItems = new List<LogRecord>();
 
+            using var exporter = new GenevaLogExporter(exporterOptions);
+
             using var loggerFactory = LoggerFactory.Create(builder => builder
                 .AddOpenTelemetry(options =>
                 {
                     options.IncludeScopes = true;
                     options.AddInMemoryExporter(exportedItems);
-                    options.AddGenevaLogExporter(options =>
-                    {
-                        options.ConnectionString = exporterOptions.ConnectionString;
-                    });
+                    options.AddProcessor(sp =>
+                                new CompositeProcessor<LogRecord>(
+                                [
+                                    new AFDCorrelationIdLogProcessor(),
+                                    new ReentrantExportProcessor<LogRecord>(exporter),
+                                ]));
                 }));
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -313,26 +299,19 @@ public class GenevaLogExporterAFDCorrelationTests
                 receiverSocket.ReceiveTimeout = 10000;
             }
 
-            // Create a test exporter to get MessagePack byte data to validate if the data was serialized correctly.
-            using var exporter = new GenevaLogExporter(exporterOptions);
+            List<ArraySegment<byte>> exportedData = [];
+            (exporter.Exporter as MsgPackLogExporter).DataTransportListener = exportedData.Add;
 
             // Emit a LogRecord and grab a copy of internal buffer for validation.
             var logger = loggerFactory.CreateLogger<GenevaLogExporterTests>();
+#pragma warning disable CA1873 // Avoid potentially expensive logging
             logger.LogInformation("Hello from {Food} {Price}.", "artichoke", 3.99);
+#pragma warning restore CA1873// Avoid potentially expensive logging
+            loggerFactory.Dispose();
 
-            byte[] serializedData;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                serializedData = MsgPackLogExporter.Buffer.Value;
-            }
-            else
-            {
-                // Read the data sent via socket.
-                serializedData = new byte[65360];
-                _ = receiverSocket.Receive(serializedData);
-            }
+            Assert.Single(exportedData);
 
-            var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(serializedData, MessagePack.Resolvers.ContractlessStandardResolver.Options);
+            var fluentdData = MessagePack.MessagePackSerializer.Deserialize<object>(exportedData[0], MessagePack.Resolvers.ContractlessStandardResolver.Options);
             var signal = (fluentdData as object[])[0] as string;
             var TimeStampAndMappings = ((fluentdData as object[])[1] as object[])[0];
             var mapping = (TimeStampAndMappings as object[])[1] as Dictionary<object, object>;
@@ -351,16 +330,6 @@ public class GenevaLogExporterAFDCorrelationTests
             catch
             {
             }
-        }
-    }
-
-    private static void ClearRunTimeContext()
-    {
-        var type = typeof(RuntimeContext);
-        var method = type.GetMethod("Clear", BindingFlags.Static | BindingFlags.NonPublic);
-        if (method != null)
-        {
-            method.Invoke(null, null);
         }
     }
 

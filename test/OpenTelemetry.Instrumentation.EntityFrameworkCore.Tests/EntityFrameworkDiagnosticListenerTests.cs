@@ -44,7 +44,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Couchbase.EntityFrameworkCore.Storage.Internal",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "couchbase", "couchbase");
         }
@@ -57,7 +57,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "IBM.EntityFrameworkCore-osx",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "db2", "ibm.db2");
         }
@@ -69,7 +69,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "FirebirdSql.EntityFrameworkCore.Firebird",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "firebird", "firebirdsql");
         }
@@ -81,7 +81,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Microsoft.EntityFrameworkCore.SqlServer",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "mssql", "microsoft.sql_server");
         }
@@ -97,7 +97,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Pomelo.EntityFrameworkCore.MySql",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "mysql", "mysql");
         }
@@ -111,7 +111,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Oracle.ManagedDataAccess.Client.OracleCommand",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "oracle", "oracle.db");
         }
@@ -125,7 +125,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Npgsql.NpgsqlCommand",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "postgresql", "postgresql");
         }
@@ -138,7 +138,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Microsoft.EntityFrameworkCore.Sqlite",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "sqlite", "sqlite");
         }
@@ -150,7 +150,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Google.Cloud.Spanner.Data.SpannerCommand",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "spanner", "gcp.spanner");
         }
@@ -162,7 +162,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Teradata.EntityFrameworkCore",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "teradata", "teradata");
         }
@@ -174,7 +174,7 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
             "Contoso.BusinessLogic.DataAccess.Command",
         ];
 
-        foreach (string name in names)
+        foreach (var name in names)
         {
             testCases.Add(name, "other_sql", "other_sql");
         }
@@ -279,8 +279,13 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
         VerifyActivityData(activity);
     }
 
-    [Fact]
-    public void EntityFrameworkEnrichDisplayNameWithEnrichWithIDbCommand()
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void EntityFrameworkEnrichDisplayNameWithEnrichWithIDbCommand(
+        bool emitOldAttributes,
+        bool emitNewAttributes)
     {
         var exportedItems = new List<Activity>();
         var expectedDisplayName = "Text main";
@@ -295,6 +300,8 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
                           activity1.DisplayName = stateDisplayName;
                           activity1.SetTag("db.name", stateDisplayName);
                       };
+                      options.EmitOldAttributes = emitOldAttributes;
+                      options.EmitNewAttributes = emitNewAttributes;
                   })
                   .Build())
         {
@@ -310,43 +317,11 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
         Assert.Single(exportedItems);
         var activity = exportedItems[0];
 
-        VerifyActivityData(activity, altDisplayName: $"{expectedDisplayName}");
-    }
-
-    [Fact]
-    public void EntityFrameworkEnrichDisplayNameWithEnrichWithIDbCommand_New()
-    {
-        var exportedItems = new List<Activity>();
-        var expectedDisplayName = "Text main";
-
-        using (Sdk.CreateTracerProviderBuilder()
-                  .AddInMemoryExporter(exportedItems)
-                  .AddEntityFrameworkCoreInstrumentation(options =>
-                  {
-                      options.EnrichWithIDbCommand = (activity1, command) =>
-                      {
-                          var stateDisplayName = $"{command.CommandType} main";
-                          activity1.DisplayName = stateDisplayName;
-                          activity1.SetTag("db.namespace", stateDisplayName);
-                      };
-                      options.EmitNewAttributes = true;
-                  })
-                  .Build())
-        {
-            using var context = new ItemsContext(this.contextOptions);
-
-            var items = context.Set<Item>().OrderBy(e => e.Name).ToList();
-
-            Assert.Equal(3, items.Count);
-            Assert.Equal("ItemOne", items[0].Name);
-            Assert.Equal("ItemThree", items[1].Name);
-            Assert.Equal("ItemTwo", items[2].Name);
-        }
-
-        Assert.Single(exportedItems);
-        var activity = exportedItems[0];
-
-        VerifyActivityData(activity, altDisplayName: $"{expectedDisplayName}", emitNewAttributes: true);
+        VerifyActivityData(
+            activity,
+            altDisplayName: expectedDisplayName,
+            emitOldAttributes: emitOldAttributes,
+            emitNewAttributes: emitNewAttributes);
     }
 
     [Fact]
@@ -483,26 +458,56 @@ public class EntityFrameworkDiagnosticListenerTests : IDisposable
         return connection;
     }
 
-    private static void VerifyActivityData(Activity activity, bool isError = false, string? altDisplayName = null, bool emitNewAttributes = false)
+    private static void VerifyActivityData(
+        Activity activity,
+        bool isError = false,
+        string? altDisplayName = null,
+        bool emitOldAttributes = true,
+        bool emitNewAttributes = false)
     {
         Assert.Equal(altDisplayName ?? "main", activity.DisplayName);
-
         Assert.Equal(ActivityKind.Client, activity.Kind);
-        Assert.Equal("sqlite", activity.Tags.FirstOrDefault(t => t.Key == SemanticConventions.AttributeDbSystem).Value);
+
+        if (emitOldAttributes)
+        {
+            Assert.Equal("sqlite", activity.Tags.FirstOrDefault(t => t.Key == SemanticConventions.AttributeDbSystem).Value);
+        }
+
+        if (emitNewAttributes)
+        {
+            Assert.Equal("sqlite", activity.Tags.FirstOrDefault(t => t.Key == SemanticConventions.AttributeDbSystemName).Value);
+        }
+
+        Assert.Equal("OpenTelemetry.Instrumentation.EntityFrameworkCore", activity.Source.Name);
+        Assert.NotNull(activity.Source.Version);
+        Assert.NotEmpty(activity.Source.Version);
+
+        if (emitNewAttributes && emitOldAttributes)
+        {
+            Assert.Null(activity.Source.TelemetrySchemaUrl);
+        }
+        else if (emitOldAttributes)
+        {
+            Assert.Equal("https://opentelemetry.io/schemas/1.24.0", activity.Source.TelemetrySchemaUrl);
+        }
+        else if (emitNewAttributes)
+        {
+            Assert.Equal("https://opentelemetry.io/schemas/1.36.0", activity.Source.TelemetrySchemaUrl);
+        }
 
         // TBD: SqlLite not setting the DataSource so it doesn't get set.
         Assert.DoesNotContain(activity.Tags, t => t.Key == "peer.service");
         Assert.DoesNotContain(activity.Tags, t => t.Key == "server.address");
         Assert.DoesNotContain(activity.Tags, t => t.Key == "server.port");
 
-        if (!emitNewAttributes)
+        if (emitOldAttributes)
         {
             Assert.Equal(altDisplayName ?? "main", activity.Tags.FirstOrDefault(t => t.Key == SemanticConventions.AttributeDbName).Value);
         }
 
         if (emitNewAttributes)
         {
-            Assert.Equal(altDisplayName ?? "main", activity.Tags.FirstOrDefault(t => t.Key == SemanticConventions.AttributeDbNamespace).Value);
+            Assert.Equal("main", activity.Tags.FirstOrDefault(t => t.Key == SemanticConventions.AttributeDbNamespace).Value);
         }
 
         if (!isError)

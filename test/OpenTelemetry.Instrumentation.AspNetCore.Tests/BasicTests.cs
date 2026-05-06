@@ -691,7 +691,7 @@ public sealed class BasicTests
         using (var client = this.factory
             .WithWebHostBuilder(builder =>
             {
-                builder.ConfigureTestServices((IServiceCollection services) =>
+                builder.ConfigureTestServices(services =>
                 {
                     services.AddSingleton<TestActivityMiddleware>(new TestNullHostActivityMiddlewareImpl(activitySourceName, activityName));
                     services.AddOpenTelemetry()
@@ -725,7 +725,6 @@ public sealed class BasicTests
         Assert.Equal("Microsoft.AspNetCore.Hosting.HttpRequestIn", aspnetcoreframeworkactivity.OperationName);
     }
 
-#if NET
     [Fact]
     public async Task UserRegisteredActivitySourceIsUsedForActivityCreationByAspNetCore()
     {
@@ -766,7 +765,6 @@ public sealed class BasicTests
 
         Assert.Equal("UserRegisteredActivitySource", activity.Source.Name);
     }
-#endif
 
     [Theory]
     [InlineData(1)]
@@ -1117,7 +1115,7 @@ public sealed class BasicTests
 
 #if NET9_0_OR_GREATER
     [Fact]
-    public async Task SignalRActivitesAreListenedTo()
+    public async Task SignalRActivitiesAreListenedTo()
     {
         var exportedItems = new List<Activity>();
         void ConfigureTestServices(IServiceCollection services)
@@ -1172,7 +1170,7 @@ public sealed class BasicTests
     }
 
     [Fact]
-    public async Task SignalRActivitesCanBeDisabled()
+    public async Task SignalRActivitiesCanBeDisabled()
     {
         var exportedItems = new List<Activity>();
         void ConfigureTestServices(IServiceCollection services)
@@ -1204,7 +1202,7 @@ public sealed class BasicTests
             await client.StopAsync();
         }
 
-        WaitForActivityExport(exportedItems, 8);
+        WaitForActivityExport(exportedItems, 7);
 
         var hubActivity = exportedItems
             .Where(a => a.DisplayName.StartsWith("TestApp.AspNetCore.TestHub", StringComparison.InvariantCulture));
@@ -1313,37 +1311,28 @@ public sealed class BasicTests
 #endif
 
     public void Dispose()
-    {
-        this.tracerProvider?.Dispose();
-    }
+        => this.tracerProvider?.Dispose();
 
     private static void WaitForActivityExport(List<Activity> exportedItems, int count)
-    {
-        // We need to let End callback execute as it is executed AFTER response was returned.
-        // In unit tests environment there may be a lot of parallel unit tests executed, so
-        // giving some breezing room for the End callback to complete
-        Assert.True(
+        => Assert.True(
             SpinWait.SpinUntil(
             () =>
             {
+                // We need to let End callback execute as it is executed AFTER response was returned.
+                // In unit tests environment there may be a lot of parallel unit tests executed, so
+                // giving some breathing room for the End callback to complete
                 Thread.Sleep(10);
                 return exportedItems.Count >= count;
             },
-            TimeSpan.FromSeconds(1)),
+            TimeSpan.FromSeconds(5)),
             $"Actual: {exportedItems.Count} Expected: {count}");
-    }
 
     private static void ValidateAspNetCoreActivity(Activity activityToValidate, string expectedHttpPath)
     {
         Assert.Equal(ActivityKind.Server, activityToValidate.Kind);
-#if NET
         Assert.Equal(HttpInListener.AspNetCoreActivitySourceName, activityToValidate.Source.Name);
         Assert.NotNull(activityToValidate.Source.Version);
         Assert.Empty(activityToValidate.Source.Version);
-#else
-        Assert.Equal(HttpInListener.ActivitySourceName, activityToValidate.Source.Name);
-        Assert.Equal(HttpInListener.Version.ToString(), activityToValidate.Source.Version);
-#endif
         Assert.Equal(expectedHttpPath, activityToValidate.GetTagValue(SemanticConventions.AttributeUrlPath) as string);
     }
 
@@ -1389,14 +1378,10 @@ public sealed class BasicTests
         public override ISet<string> Fields => throw new NotImplementedException();
 
         public override PropagationContext Extract<T>(PropagationContext context, T carrier, Func<T, string, IEnumerable<string>?> getter)
-        {
-            return new PropagationContext(this.activityContext, this.baggage);
-        }
+            => new(this.activityContext, this.baggage);
 
         public override void Inject<T>(PropagationContext context, T carrier, Action<T, string, string> setter)
-        {
-            throw new NotImplementedException();
-        }
+            => throw new NotImplementedException();
     }
 
     private class TestSampler(SamplingDecision samplingDecision, IEnumerable<KeyValuePair<string, object>>? attributes = null) : Sampler
@@ -1405,9 +1390,7 @@ public sealed class BasicTests
         private readonly IEnumerable<KeyValuePair<string, object>>? attributes = attributes;
 
         public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
-        {
-            return new SamplingResult(this.samplingDecision, this.attributes);
-        }
+            => new(this.samplingDecision, this.attributes);
     }
 
     private class TestHttpInListener(AspNetCoreTraceInstrumentationOptions options) : HttpInListener(options)
@@ -1439,9 +1422,7 @@ public sealed class BasicTests
         }
 
         public override void PostProcess(HttpContext context)
-        {
-            this.activity?.Stop();
-        }
+            => this.activity?.Stop();
     }
 
     private class TestTestActivityMiddleware(string activitySourceName, string activityName) : TestActivityMiddleware
@@ -1451,13 +1432,9 @@ public sealed class BasicTests
         private Activity? activity;
 
         public override void PreProcess(HttpContext context)
-        {
-            this.activity = this.activitySource.StartActivity(this.activityName);
-        }
+            => this.activity = this.activitySource.StartActivity(this.activityName);
 
         public override void PostProcess(HttpContext context)
-        {
-            this.activity?.Stop();
-        }
+            => this.activity?.Stop();
     }
 }

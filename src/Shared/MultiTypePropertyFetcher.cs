@@ -39,23 +39,18 @@ internal sealed class MultiTypePropertyFetcher<T>
         var type = obj.GetType().GetTypeInfo();
         if (!this.innerFetcher.TryGetValue(type, out var fetcher))
         {
-            var property = type.DeclaredProperties.FirstOrDefault(p => string.Equals(p.Name, this.propertyName, StringComparison.OrdinalIgnoreCase));
-            if (property == null)
-            {
-                property = type.GetProperty(this.propertyName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            }
+            var property =
+                type.DeclaredProperties.FirstOrDefault(p => string.Equals(p.Name, this.propertyName, StringComparison.OrdinalIgnoreCase)) ??
+                type.GetProperty(this.propertyName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 
-            fetcher = PropertyFetch.FetcherForProperty(property);
+#pragma warning disable IDE0370 // Suppression is unnecessary
+            fetcher = PropertyFetch.FetcherForProperty(property!);
+#pragma warning restore IDE0370 // Suppression is unnecessary
 
             this.innerFetcher.TryAdd(type, fetcher);
         }
 
-        if (fetcher == null)
-        {
-            return default;
-        }
-
-        return fetcher.Fetch(obj);
+        return fetcher == null ? default : fetcher.Fetch(obj);
     }
 
     // see https://github.com/dotnet/corefx/blob/master/src/System.Diagnostics.DiagnosticSource/src/System/Diagnostics/DiagnosticSourceEventSource.cs
@@ -74,15 +69,14 @@ internal sealed class MultiTypePropertyFetcher<T>
             }
 
             var typedPropertyFetcher = typeof(TypedPropertyFetch<,>);
+#pragma warning disable IDE0370 // Suppression is unnecessary
             var instantiatedTypedPropertyFetcher = typedPropertyFetcher.MakeGenericType(
-                typeof(T), propertyInfo.DeclaringType, propertyInfo.PropertyType);
-            return (PropertyFetch)Activator.CreateInstance(instantiatedTypedPropertyFetcher, propertyInfo);
+                typeof(T), propertyInfo.DeclaringType!, propertyInfo.PropertyType);
+            return (PropertyFetch)Activator.CreateInstance(instantiatedTypedPropertyFetcher, propertyInfo)!;
+#pragma warning restore IDE0370 // Suppression is unnecessary
         }
 
-        public virtual T? Fetch(object obj)
-        {
-            return default;
-        }
+        public virtual T? Fetch(object obj) => default;
 
 #pragma warning disable CA1812
         private sealed class TypedPropertyFetch<TDeclaredObject, TDeclaredProperty> : PropertyFetch
@@ -93,18 +87,15 @@ internal sealed class MultiTypePropertyFetcher<T>
 
             public TypedPropertyFetch(PropertyInfo property)
             {
-                this.propertyFetch = (Func<TDeclaredObject, TDeclaredProperty>)property.GetMethod.CreateDelegate(typeof(Func<TDeclaredObject, TDeclaredProperty>));
+                this.propertyFetch =
+#if NET
+                    property.GetMethod!.CreateDelegate<Func<TDeclaredObject, TDeclaredProperty>>();
+#else
+                    (Func<TDeclaredObject, TDeclaredProperty>)property.GetMethod.CreateDelegate(typeof(Func<TDeclaredObject, TDeclaredProperty>));
+#endif
             }
 
-            public override T? Fetch(object obj)
-            {
-                if (obj is TDeclaredObject o)
-                {
-                    return this.propertyFetch(o);
-                }
-
-                return default;
-            }
+            public override T? Fetch(object obj) => obj is TDeclaredObject o ? this.propertyFetch(o) : (T?)default;
         }
     }
 }

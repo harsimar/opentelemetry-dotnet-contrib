@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## 0.3.0-alpha.1
+
+Released 2026-Apr-28
+
+* Enhance EffectiveConfigFile:
+  * Remove `CreateFromFilePath` factory method.
+  * Add `CreateFromSteam` and `CreateFromStreamAsync` methods which enforce max
+    size limits.
+  * Content property is now `ReadOnlyMemory`.
+  ([#4285](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4285))
+
+## 0.2.0-alpha.1
+
+Released 2026-Apr-21
+
+* Add agent effective config reporting.
+  ([#3716](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3716))
+
+* Add ability to send custom messages.
+  ([#3809](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3809))
+
+* Add support for sticky HTTP connections via the `OpAMP-Instance-UID` header.
+  ([#3830](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3830))
+
+* Apply response size limits for oversized OpAMP responses to resolve
+  [GHSA-w2jh-77fq-7gp8](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/security/advisories/GHSA-w2jh-77fq-7gp8).
+  ([#4116](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4116))
+
+* Harden WebSocket transport:
+  * Enforce maximum server message size.
+  * Use a cancellable receive loop with deterministic disposal.
+  * Add `OpAmpClientSettings.ClientWebSocketFactory`, and remove the insecure
+  default of accepting any server TLS certificate when connecting on .NET.
+  ([#4133](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4133))
+
+* Ensure heartbeat interval is bounded.
+  ([#4136](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4136))
+
+* Add missing null check for remote config.
+  ([#4138](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4138))
+
+## 0.1.0-alpha.4
+
+Released 2026-Jan-14
+
 * Add setting to configure the factory used to create `HttpClient` instances
   used for the OpAMP Plain HTTP transport.
   ([#3589](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3589))
@@ -17,6 +62,9 @@
 
 * Add settings for remote configuration and update advertised capabilities.
   ([#3618](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3618))
+
+* Expose public `CustomCapabilitiesMessage` and `CustomMessageMessage`.
+  ([#3681](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3681))
 
 ## 0.1.0-alpha.3
 

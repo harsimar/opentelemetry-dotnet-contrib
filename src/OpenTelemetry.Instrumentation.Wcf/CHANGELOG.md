@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+* Fixed an issue where server-side exception recording could bypass
+  `IncomingRequestFilter` for filtered faulting requests.
+  ([#4306](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4306))
+
+* Fixed `ArgumentNullException` thrown by `TelemetryEndpointBehavior` when an endpoint
+  operation has a `null` Action (e.g., when WCF service help pages are enabled).
+  ([#4026](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4026))
+
+## 1.15.1-beta.2
+
+Released 2026-Apr-22
+
+* Revert `System.Security.Cryptography.Xml` dependency version update for
+  .NET 8, 9, and 10 to `4.7.1` released in 1.15.1-beta.1 introduced in [#4103](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4103).
+  ([#4266](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4266))
+
+## 1.15.1-beta.1
+
+Released 2026-Apr-21
+
+* Update `System.Security.Cryptography.Xml` dependency versions for .NET 8, 9 and
+  10 to pick up fixes for [GHSA-w3x6-4m5h-cxqf](https://github.com/dotnet/runtime/security/advisories/GHSA-w3x6-4m5h-cxqf)
+  and [GHSA-37gx-xxp4-5rgx](https://github.com/dotnet/runtime/security/advisories/GHSA-37gx-xxp4-5rgx).
+  ([#4103](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4103))
+
+* Fixed an issue where instrumented WCF channel `Begin*` methods threw an
+  `ArgumentNullException` when `AsyncCallback` was `null`.
+  ([#4164](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4164))
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.15.0-beta.1
+
+Released 2026-Jan-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
+
 ## 1.14.0-beta.1
 
 Released 2025-Nov-13

@@ -303,6 +303,28 @@ public class AWSLambdaWrapperTests : IDisposable
         await AWSLambdaWrapper.TraceAsync(tracerProvider, this.sampleHandlers.SampleHandlerAsyncInputAndNoReturn, "TestStream", emptyLambdaContext);
     }
 
+    [Fact]
+    public void ResourceAttributesFromEnvVarArePresentAfterAddAWSLambdaConfigurations()
+    {
+        using var envScope = EnvironmentVariableScope.Create(
+            ("OTEL_RESOURCE_ATTRIBUTES", "application=TestApplication,env=prod"));
+
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddAWSLambdaConfigurations()
+            .Build();
+
+        var resource = tracerProvider.GetResource();
+        Assert.NotNull(resource);
+
+        var attrs = resource.Attributes.ToDictionary(x => x.Key, x => x.Value);
+
+        Assert.True(attrs.TryGetValue("application", out var actual), "Resource attribute 'application' is missing");
+        Assert.Equal("TestApplication", actual);
+
+        Assert.True(attrs.TryGetValue("env", out actual), "Resource attribute 'env' is missing");
+        Assert.Equal("prod", actual);
+    }
+
     private static ActivityContext CreateParentContext()
     {
         var traceId = ActivityTraceId.CreateFromString(TraceId.AsSpan());
@@ -318,6 +340,9 @@ public class AWSLambdaWrapperTests : IDisposable
         Assert.Equal(ActivityKind.Server, activity.Kind);
         Assert.Equal("testfunction", activity.DisplayName);
         Assert.Equal("OpenTelemetry.Instrumentation.AWSLambda", activity.Source.Name);
+        Assert.NotNull(activity.Source.Version);
+        Assert.NotEmpty(activity.Source.Version);
+        Assert.StartsWith("https://opentelemetry.io/schemas/", activity.Source.TelemetrySchemaUrl);
 
         // Version should consist of 3 decimals separated by dots followed by optional pre-release suffix
         Assert.Matches(@"^\d+(\.\d+){2}(-.+)?$", activity.Source.Version);
@@ -344,7 +369,7 @@ public class AWSLambdaWrapperTests : IDisposable
         Assert.Equal("other", activity.GetTagValue(ExpectedSemanticConventions.AttributeFaasTrigger));
         Assert.Equal("111111111111", activity.GetTagValue(ExpectedSemanticConventions.AttributeCloudAccountID));
         Assert.Equal(this.sampleLambdaContext.LogStreamName, activity.GetTagValue(ExpectedSemanticConventions.AttributeFaasInstance));
-        Assert.Equal(this.sampleLambdaContext.MemoryLimitInMB * 1024 * 1024, activity.GetTagValue(ExpectedSemanticConventions.AttributeFaasMaxMemory));
+        Assert.Equal(this.sampleLambdaContext.MemoryLimitInMB * 1024L * 1024L, activity.GetTagValue(ExpectedSemanticConventions.AttributeFaasMaxMemory));
     }
 
     private void AssertSpanException(Activity activity)

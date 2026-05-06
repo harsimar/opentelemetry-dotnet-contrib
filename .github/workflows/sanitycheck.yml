@@ -7,27 +7,22 @@ permissions:
   contents: read
 
 jobs:
-  run-misspell:
+  run-typos:
     runs-on: ubuntu-24.04
 
     steps:
     - name: check out code
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-    - name: install misspell
-      run: |
-        curl -L -o ./install-misspell.sh https://git.io/misspell
-        sh ./install-misspell.sh
-
-    - name: run misspell
-      run: ./bin/misspell -error .
+    - name: check for typos
+      uses: crate-ci/typos@bbaefadf97b0ec5fdc942684b647f1a6ab250274 # v1.46.0
 
   run-sanitycheck:
     runs-on: ubuntu-24.04
 
     steps:
     - name: check out code
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: validate file encoding, line endings, indentation, and whitespace
       run: python3 ./build/scripts/sanitycheck.py

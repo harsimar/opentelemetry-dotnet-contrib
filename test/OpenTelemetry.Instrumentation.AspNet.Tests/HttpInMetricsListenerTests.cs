@@ -1,7 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-using System.Diagnostics;
 using System.Web;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Metrics;
@@ -22,6 +21,7 @@ public class HttpInMetricsListenerTests
     [InlineData("http://localhost/api/Values/5", 3, "api/{controller}/{id}", null, "http", "localhost", "api/Values/{id}", 80, 200)]
     [InlineData("http://localhost/api/Values/5", 4, "api/Values/{id}", null, "http", "localhost", "api/Values/{id}", 80, 200)]
     [InlineData("http://localhost/api/Values/5", 1, "api/{controller}/{id}", null, "http", "localhost", "api/Values/{id}", 80, 500)]
+    [InlineData("http://localhost/api/Values/Details", 3, "api/{controller}/{actionName}", null, "http", "localhost", "api/Values/{actionName}", 80, 200)]
     [InlineData("http://localhost:8080/api/Values/5", 0, null, null, "http", "localhost", null, 8080, 200)]
     [InlineData("http://localhost:8080/api/Values/5", 1, "api/{controller}/{id}", null, "http", "localhost", "api/Values/{id}", 8080, 200)]
     [InlineData("http://localhost:8080/api/Values/5", 3, "api/{controller}/{id}", "enrich", "http", "localhost", "api/Values/{id}", 8080, 200)]
@@ -48,7 +48,7 @@ public class HttpInMetricsListenerTests
             {
                 options.EnableServerAttributesForRequestDuration = enableServerAttributesForRequestDuration;
 
-                options.EnrichWithHttpContext += (HttpContextBase context, ref TagList tags) =>
+                options.EnrichWithHttpContext += (context, ref tags) =>
                 {
                     if (enrichMode == "throw")
                     {

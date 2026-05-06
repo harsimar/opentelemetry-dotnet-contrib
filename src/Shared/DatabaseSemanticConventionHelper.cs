@@ -1,11 +1,15 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#if INCLUDE_SQL_QUERY_PARSER
 using System.Diagnostics;
+#endif
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
+#if INCLUDE_SQL_QUERY_PARSER
 using OpenTelemetry.Instrumentation;
 using OpenTelemetry.Trace;
+#endif
 
 namespace OpenTelemetry.Internal;
 
@@ -59,6 +63,7 @@ internal static class DatabaseSemanticConventionHelper
         return DatabaseSemanticConvention.Old;
     }
 
+#if INCLUDE_SQL_QUERY_PARSER
     public static void ApplyConventionsForQueryText(
         Activity activity,
         string? commandText,
@@ -66,8 +71,8 @@ internal static class DatabaseSemanticConventionHelper
         bool emitNewAttributes,
         bool sanitizeQuery = true)
     {
-        string queryText = commandText ?? string.Empty;
-        string querySummary = string.Empty;
+        var queryText = commandText ?? string.Empty;
+        var querySummary = string.Empty;
 
         if (sanitizeQuery)
         {
@@ -94,6 +99,31 @@ internal static class DatabaseSemanticConventionHelper
         }
     }
 
+    public static void AddTagsForSamplingAndUpdateActivityNameForQueryText(
+        ref TagList tagList,
+        string? commandText,
+        ref string activityName,
+        bool sanitizeQuery = true)
+    {
+        var queryText = commandText ?? string.Empty;
+        var querySummary = string.Empty;
+
+        if (sanitizeQuery)
+        {
+            var sqlStatementInfo = SqlProcessor.GetSanitizedSql(commandText);
+            queryText = sqlStatementInfo.SanitizedSql;
+            querySummary = sqlStatementInfo.DbQuerySummary;
+        }
+
+        tagList.Add(SemanticConventions.AttributeDbQueryText, queryText);
+
+        if (!string.IsNullOrEmpty(querySummary))
+        {
+            tagList.Add(SemanticConventions.AttributeDbQuerySummary, querySummary);
+            activityName = querySummary;
+        }
+    }
+
     public static void ApplyConventionsForStoredProcedure(
         Activity activity,
         string? commandText,
@@ -115,6 +145,19 @@ internal static class DatabaseSemanticConventionHelper
         }
     }
 
+    public static void AddTagsForSamplingAndUpdateActivityNameForStoredProcedure(
+        ref TagList tagsList,
+        string? commandText,
+        ref string activityName)
+    {
+        tagsList.Add(SemanticConventions.AttributeDbOperationName, "EXECUTE");
+        tagsList.Add(SemanticConventions.AttributeDbStoredProcedureName, commandText);
+        var dbQuerySummary = $"EXECUTE {commandText}";
+        tagsList.Add(SemanticConventions.AttributeDbQuerySummary, dbQuerySummary);
+        activityName = dbQuerySummary;
+    }
+#endif
+
     private static bool TryGetConfiguredValues(IConfiguration configuration, [NotNullWhen(true)] out HashSet<string>? values)
     {
         try
@@ -127,7 +170,9 @@ internal static class DatabaseSemanticConventionHelper
                 return false;
             }
 
+#pragma warning disable IDE0370 // Suppression is unnecessary
             var stringValues = stringValue!.Split(separator: Separator, options: StringSplitOptions.RemoveEmptyEntries);
+#pragma warning restore IDE0370 // Suppression is unnecessary
             values = new HashSet<string>(stringValues, StringComparer.OrdinalIgnoreCase);
             return true;
         }

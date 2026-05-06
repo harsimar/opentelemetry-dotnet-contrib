@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>$(SupportedNetTargets)</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <Description>Benchmark project for OpenTelemetry .NET StackExchange.Redis instrumentation.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="StackExchange.Redis" VersionOverride="2.12.14" />
+    <PackageReference Include="Testcontainers.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)\src\OpenTelemetry.Instrumentation.StackExchangeRedis\OpenTelemetry.Instrumentation.StackExchangeRedis.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(RepoRoot)\test\OpenTelemetry.Instrumentation.StackExchangeRedis.Tests\RedisFixture.cs" Link="Includes\RedisFixture.cs" />
+    <Compile Include="$(RepoRoot)\test\Shared\ContainerFixture.cs" Link="Includes\ContainerFixture.cs" />
+    <Compile Include="$(RepoRoot)\test\Shared\ContainerFixture{T}.cs" Link="Includes\ContainerFixture{T}.cs" />
+    <Compile Include="$(RepoRoot)\test\Shared\DockerHelper.cs" Link="Includes\DockerHelper.cs" />
+    <Compile Include="$(RepoRoot)\test\Shared\DockerPlatform.cs" Link="Includes\DockerPlatform.cs" />
+    <EmbeddedResource Include="$(RepoRoot)\test\OpenTelemetry.Instrumentation.StackExchangeRedis.Tests\redis.Dockerfile" LogicalName="redis.Dockerfile" />
+  </ItemGroup>
+
+</Project>

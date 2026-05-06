@@ -2,9 +2,48 @@
 
 ## Unreleased
 
+* Fix SQL query text sanitization for malformed bracketed identifiers in `FROM`
+  clauses to avoid leaking following literal values.
+  ([#4317](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4317))
+
+* Fix SQL query text sanitization performance for malformed `FROM` clauses with
+  repeated unterminated bracketed identifiers.
+  ([#4339](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4339))
+
+## 1.15.1-beta.1
+
+Released 2026-Apr-21
+
+* Fix `IndexOutOfRangeException` when parsing SQL statements.
+  ([#4139](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4139))
+
+* Add instrumentation schema URL to traces when using either the old or new
+  database Semantic Conventions, but not when both are used together.
+  ([#4078](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4078))
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.15.0-beta.1
+
+Released 2026-Jan-21
+
 * Improve SQL parsing for sanitization and summary generation. Support additional
   cases for escaped identifiers. Optimize performance of parsing logic.
   ([#3627](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3627))
+
+* Improve SQL parsing for sanitization for Unicode string literals.
+  ([#3662](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3662))
+
+* Sanitize the object name for SQL query text using the LOGIN or USER keywords and
+  remove from query summaries.
+  ([#3663](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3663))
+
+* Improve SQL parsing to generate query summaries for more T-SQL keywords.
+  ([#3671](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3671))
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
 
 ## 1.14.0-beta.2
 
