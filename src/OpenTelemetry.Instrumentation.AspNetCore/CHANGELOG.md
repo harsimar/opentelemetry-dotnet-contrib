@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+* Avoid duplicative work to add tags to traces when they are already natively supported
+  by ASP.NET Core itself. When using ASP.NET Core 10, performance can be
+  improved by setting the `Microsoft.AspNetCore.Hosting.SuppressActivityOpenTelemetryData`
+  AppContext switch to `false` (its default value is `true`).
+  ([#3993](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3993))
+
+* Add instrumentation schema URL to traces for `netstandard2.0`.
+  ([#4066](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4066))
+
+## 1.15.2
+
+Released 2026-Apr-21
+
+* The value of the `http.route` attribute is now aligned with ASP.NET Core itself.
+  ([#3992](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3992))
+
+* Fix `http.route` for the root path for Razor Pages.
+  ([#4016](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4016))
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.15.1
+
+Released 2026-Mar-11
+
+* **Breaking Change**: For gRPC server spans, span status is now follow the
+  OpenTelemetry Semantic Conventions. Only the following gRPC status codes
+  set span status to `Error`: `UNKNOWN`, `DEADLINE_EXCEEDED`, `UNIMPLEMENTED`, `INTERNAL`,
+  `UNAVAILABLE`, and `DATA_LOSS`. Previously, all non-OK status codes were treated
+  as errors.
+  ([#3902](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3902))
+
+## 1.15.0
+
+Released 2026-Jan-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
+
 ## 1.14.0
 
 Released 2025-Nov-13

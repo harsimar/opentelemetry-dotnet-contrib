@@ -32,8 +32,9 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
 #if NET
     [InlineData(CommandType.Text, GetContextInfoQuery, GetContextInfoQuery, false, false, false)]
     [InlineData(CommandType.Text, GetContextInfoQuery, GetContextInfoQuery, false, false, true)]
-#endif
     [InlineData(CommandType.StoredProcedure, "sp_who", "sp_who")]
+#endif
+    [InlineData(CommandType.Text, "exec sp_who", "exec sp_who")]
     public void SuccessfulCommandTest(
         CommandType commandType,
         string commandText,
@@ -68,8 +69,6 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
 
         sqlConnection.Open();
 
-        var dataSource = sqlConnection.DataSource;
-
         sqlConnection.ChangeDatabase("master");
         SqlTransaction? transaction = null;
 #pragma warning disable CA2100
@@ -90,7 +89,7 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
         {
             commandResult = sqlCommand.ExecuteScalar();
         }
-        catch
+        catch (Exception)
         {
         }
 
@@ -126,8 +125,6 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
         var sampler = new TestSampler();
         var activities = new List<Activity>();
 
-        using var scope = SemanticConventionScope.Get(useNewConventions: true);
-
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .SetSampler(sampler)
             .AddInMemoryExporter(activities)
@@ -137,8 +134,6 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
         using var sqlConnection = new SqlConnection(this.GetConnectionString());
 
         await sqlConnection.OpenAsync();
-
-        var dataSource = sqlConnection.DataSource;
 
         sqlConnection.ChangeDatabase("master");
 
@@ -167,12 +162,10 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
         var activities = new List<Activity>();
         var metrics = new List<MetricSnapshot>();
 
-        using var listener = new ActivityListener()
-        {
-            ActivityStarted = activities.Add,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            ShouldListenTo = _ => true,
-        };
+        using var listener = new ActivityListener();
+        listener.ActivityStarted = activities.Add;
+        listener.Sample = (ref _) => ActivitySamplingResult.AllData;
+        listener.ShouldListenTo = _ => true;
 
         ActivitySource.AddActivityListener(listener);
 
@@ -184,8 +177,6 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
         using var sqlConnection = new SqlConnection(this.GetConnectionString());
 
         await sqlConnection.OpenAsync();
-
-        var dataSource = sqlConnection.DataSource;
 
         sqlConnection.ChangeDatabase("master");
 
@@ -250,7 +241,7 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
             }
         }
 
-        Assert.Equal(SqlActivitySourceHelper.MicrosoftSqlServerDbSystemName, activity.GetTagValue(SemanticConventions.AttributeDbSystemName));
+        Assert.Equal(SqlTelemetryHelper.MicrosoftSqlServerDbSystemName, activity.GetTagValue(SemanticConventions.AttributeDbSystemName));
         Assert.Equal("master", activity.GetTagValue(SemanticConventions.AttributeDbNamespace));
 
         Assert.DoesNotContain(activity.TagObjects, tag => tag.Key.StartsWith("db.query.parameter.", StringComparison.Ordinal));
@@ -280,15 +271,9 @@ public sealed class SqlClientIntegrationTests : IClassFixture<SqlClientIntegrati
             samplingParameters.Tags,
             kvp => kvp.Key == SemanticConventions.AttributeDbSystemName
                    && kvp.Value != null
-                   && (string)kvp.Value == SqlActivitySourceHelper.MicrosoftSqlServerDbSystemName);
+                   && (string)kvp.Value == SqlTelemetryHelper.MicrosoftSqlServerDbSystemName);
     }
 
     private string GetConnectionString()
-        => this.fixture.DatabaseContainer.GetConnectionString();
-
-    private static class SemanticConventionScope
-    {
-        public static IDisposable Get(bool useNewConventions)
-            => EnvironmentVariableScope.Create("OTEL_SEMCONV_STABILITY_OPT_IN", useNewConventions ? "database" : string.Empty);
-    }
+        => this.fixture.TypedContainer.GetConnectionString();
 }

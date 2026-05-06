@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+* Update `System.Text.Json` for `netstandard2.0` and `net8.0` to `8.0.5`.
+  ([#4154](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4154))
+
+## 1.15.1-beta.1
+
+Released 2026-Apr-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.15.0-beta.1
+
+Released 2026-Jan-21
+
+* Add `net8.0` and `net10.0` target frameworks.
+  ([#3717](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3717))
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
+
 ## 1.14.0-beta.1
 
 Released 2025-Nov-13

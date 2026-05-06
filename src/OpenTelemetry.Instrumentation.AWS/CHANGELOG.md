@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+* Add instrumentation scope version and schema URL to metrics and traces.
+  ([#4063](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4063))
+
+* Pass AWS attribute values to created meters as tags.
+  ([#4063](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4063))
+
+* Capture SNS `TopicArn` as the `aws.sns.topic.arn` span attribute.
+  ([#4043](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4043))
+
+* Add `cloud.region` attribute to all AWS SDK client spans.
+  ([#4043](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4043))
+
+* Add messaging attributes for AWS SNS and SQS.
+  ([#4043](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4043))
+
+* BREAKING: Update latest AWS Semantic Conventions to 1.40.0.
+  ([#4043](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4043))
+
+* Fix suppression scope leakage when `SuppressDownstreamInstrumentation` is
+  enabled.
+  ([#4304](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4304))
+
+## 1.15.1
+
+Released 2026-Apr-21
+
+* Fix incorrect type for the `aws.dynamodb.table_names` attribute.
+  ([#4013](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4013))
+
+* Add the `aws.s3.bucket` and `aws.s3.key` attributes to S3 spans.
+  ([#4029](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4029))
+
+* Fix lifecycle bugs when disposing cached AWS meter/tracer handles and reinitializing
+  telemetry for the same scope.
+  ([#4126](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4126))
+
+## 1.15.0
+
+Released 2026-Jan-21
+
+## 1.14.2
+
+Released 2026-Jan-14
+
+* Update minimal supported version of `AWSSDK.Core` to `4.0.3.3`.
+  Older versions are affected by [CVE-2026-22611](https://github.com/advisories/GHSA-9cvc-h2w8-phrp).
+  ([#3683](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3683))
+
 ## 1.14.1
 
 Released 2025-Dec-19

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry.Exporter.Geneva.MsgPack;
 using OpenTelemetry.Exporter.Geneva.Tld;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 /*
@@ -26,6 +27,8 @@ Intel Core i7-9700 CPU 3.00GHz, 1 CPU, 8 logical and 8 physical cores
 
 namespace OpenTelemetry.Exporter.Geneva.Benchmarks;
 
+#pragma warning disable CA1873 // Avoid potentially expensive logging
+
 [MemoryDiagnoser]
 public class TLDLogExporterBenchmarks
 {
@@ -37,16 +40,18 @@ public class TLDLogExporterBenchmarks
 
     public TLDLogExporterBenchmarks()
     {
-        this.msgPackExporter = new MsgPackLogExporter(new GenevaExporterOptions
-        {
-            ConnectionString = "EtwSession=OpenTelemetry",
-            PrepopulatedFields = new Dictionary<string, object>
+        this.msgPackExporter = new MsgPackLogExporter(
+            new GenevaExporterOptions
             {
-                ["cloud.role"] = "BusyWorker",
-                ["cloud.roleInstance"] = "CY1SCH030021417",
-                ["cloud.roleVer"] = "9.0.15289.2",
+                ConnectionString = "EtwSession=OpenTelemetry",
+                PrepopulatedFields = new Dictionary<string, object>
+                {
+                    ["cloud.role"] = "BusyWorker",
+                    ["cloud.roleInstance"] = "CY1SCH030021417",
+                    ["cloud.roleVer"] = "9.0.15289.2",
+                },
             },
-        });
+            () => Resource.Empty);
 
         this.tldExporter = new TldLogExporter(new GenevaExporterOptions()
         {
@@ -80,27 +85,19 @@ public class TLDLogExporterBenchmarks
 
     [Benchmark]
     public void MsgPack_SerializeLogRecord()
-    {
-        this.msgPackExporter.SerializeLogRecord(this.logRecord);
-    }
+        => this.msgPackExporter.SerializeLogRecord(this.logRecord);
 
     [Benchmark]
     public void TLD_SerializeLogRecord()
-    {
-        this.tldExporter.SerializeLogRecord(this.logRecord);
-    }
+        => this.tldExporter.SerializeLogRecord(this.logRecord);
 
     [Benchmark]
     public void MsgPack_ExportLogRecord()
-    {
-        this.msgPackExporter.Export(this.batch);
-    }
+        => this.msgPackExporter.Export(this.batch);
 
     [Benchmark]
     public void TLD_ExportLogRecord()
-    {
-        this.tldExporter.Export(this.batch);
-    }
+        => this.tldExporter.Export(this.batch);
 
     [GlobalCleanup]
     public void Cleanup()

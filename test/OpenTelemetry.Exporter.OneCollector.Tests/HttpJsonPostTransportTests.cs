@@ -89,7 +89,7 @@ public class HttpJsonPostTransportTests
          * This test runs a few different iterations...
          *
          * 0) Callback is attached and verified to fire.
-         * 1) Exisiting callback fires again and is verified. Then we remove the callback.
+         * 1) Existing callback fires again and is verified. Then we remove the callback.
          * 2) Verifies callback is NOT attached and NOT fired.
          * 3) Callback is attached again and verified to fire. Then we remove the callback.
          * 4) Tests the callback on a failed message with includeFailures: false.
@@ -315,9 +315,9 @@ public class HttpJsonPostTransportTests
     private static void AssertStandardHeaders(HttpListenerRequest request, bool listenerEnabled)
     {
         Assert.Equal("POST", request.HttpMethod);
-        Assert.True(!string.IsNullOrWhiteSpace(request.Headers["User-Agent"]));
-        Assert.True(!string.IsNullOrWhiteSpace(request.Headers["sdk-version"]));
-        Assert.True(!string.IsNullOrWhiteSpace(request.Headers["x-apikey"]));
+        Assert.False(string.IsNullOrWhiteSpace(request.Headers["User-Agent"]));
+        Assert.False(string.IsNullOrWhiteSpace(request.Headers["sdk-version"]));
+        Assert.False(string.IsNullOrWhiteSpace(request.Headers["x-apikey"]));
         Assert.Equal("application/x-json-stream; charset=utf-8", request.Headers["Content-Type"]);
         if (listenerEnabled)
         {

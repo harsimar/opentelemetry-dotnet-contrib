@@ -1,8 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-using System.Collections;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Web;
 using OpenTelemetry.Context.Propagation;
@@ -18,6 +16,7 @@ public class ActivityHelperTest : IDisposable
     private const string BaggageInHeader = "TestKey1=123,TestKey2=456,TestKey1=789";
     private const string TestActivityName = "Activity.Test";
     private const string TestActivitySourceName = "TestActivitySource";
+    private const string StopInstrumentationCallbackContextKey = "__AspnetOpenTelemetryInstrumentationStopCallback__";
 
     private readonly ActivitySource testActivitySource = new(TestActivitySourceName);
     private readonly TextMapPropagator noopTextMapPropagator = new NoopTextMapPropagator();
@@ -57,6 +56,16 @@ public class ActivityHelperTest : IDisposable
     }
 
     [Fact]
+    public void Baggage_Is_Restored_Before_Starting_Activity()
+    {
+        this.EnableListener();
+        var propagator = new MockTextMapPropagator();
+        var context = HttpContextHelper.GetFakeHttpContextBase();
+        using var activity = ActivityHelper.StartAspNetActivity(propagator, context, this.StartTestActivityWithBaggageAttribute);
+        Assert.Equal(MockTextMapPropagator.BaggageValue, activity?.Tags.FirstOrDefault(kv => kv.Key == MockTextMapPropagator.BaggageKey).Value);
+    }
+
+    [Fact]
     public async Task Can_Restore_Activity()
     {
         this.EnableListener();
@@ -83,7 +92,7 @@ public class ActivityHelperTest : IDisposable
         await testTask;
     }
 
-    [Fact(Skip = "https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/3302")]
+    [Fact]
     public async Task Can_Restore_Baggage()
     {
         this.EnableListener();
@@ -94,7 +103,7 @@ public class ActivityHelperTest : IDisposable
         };
 
         var context = HttpContextHelper.GetFakeHttpContextBase(headers: requestHeaders);
-        using var rootActivity = ActivityHelper.StartAspNetActivity(new CompositeTextMapPropagator([new TraceContextPropagator(), new BaggagePropagator()]), context, null);
+        using var rootActivity = ActivityHelper.StartAspNetActivity(new CompositeTextMapPropagator([new TraceContextPropagator(), new BaggagePropagator()]), context, this.StartTestActivity);
 
         Assert.NotNull(rootActivity);
         rootActivity.AddTag("k1", "v1");
@@ -312,6 +321,113 @@ public class ActivityHelperTest : IDisposable
     }
 
     [Fact]
+    public void Should_Not_Fire_Stop_Callback_Without_RootActivity()
+    {
+        var context = HttpContextHelper.GetFakeHttpContextBase();
+        using var rootActivity = ActivityHelper.StartAspNetActivity(this.noopTextMapPropagator, context, null);
+
+        Assert.Null(rootActivity);
+        Assert.Equal(ActivityHelper.StartedButNotSampledObj, context.Items[ActivityHelper.ContextKey]);
+
+        var instrumentationCallbackFired = false;
+        var callbackFired = false;
+        context.Items[StopInstrumentationCallbackContextKey] = (Action<Activity?, HttpContextBase>)((activity, _) =>
+        {
+            Assert.Null(activity);
+            instrumentationCallbackFired = true;
+        });
+
+        ActivityHelper.StopAspNetActivity(
+            this.noopTextMapPropagator,
+            rootActivity,
+            context,
+            (_, _) => callbackFired = true);
+
+        Assert.True(instrumentationCallbackFired);
+        Assert.False(callbackFired);
+        Assert.Null(context.Items[ActivityHelper.ContextKey]);
+        Assert.Null(context.Items[StopInstrumentationCallbackContextKey]);
+    }
+
+    [Fact]
+    public void Should_Fire_Instrumentation_Stop_Callback_Without_RootActivity()
+    {
+        var context = HttpContextHelper.GetFakeHttpContextBase();
+        using var rootActivity = ActivityHelper.StartAspNetActivity(this.noopTextMapPropagator, context, null);
+
+        Assert.Null(rootActivity);
+        Assert.Equal(ActivityHelper.StartedButNotSampledObj, context.Items[ActivityHelper.ContextKey]);
+
+        var callbackFired = false;
+        context.Items[StopInstrumentationCallbackContextKey] = (Action<Activity?, HttpContextBase>)((activity, _) =>
+        {
+            Assert.Null(activity);
+            callbackFired = true;
+        });
+
+        ActivityHelper.StopAspNetActivity(
+            this.noopTextMapPropagator,
+            rootActivity,
+            context,
+            onRequestStoppedCallback: null);
+
+        Assert.True(callbackFired);
+        Assert.Null(context.Items[ActivityHelper.ContextKey]);
+        Assert.Null(context.Items[StopInstrumentationCallbackContextKey]);
+    }
+
+    [Fact]
+    public void Should_Handle_Instrumentation_Stop_Callback_Exception()
+    {
+        this.EnableListener();
+        var context = HttpContextHelper.GetFakeHttpContextBase();
+        using var rootActivity = ActivityHelper.StartAspNetActivity(this.noopTextMapPropagator, context, this.StartTestActivity)!;
+
+        var publicCallbackFired = false;
+        context.Items[StopInstrumentationCallbackContextKey] = (Action<Activity?, HttpContextBase>)((_, _) =>
+        {
+            throw new InvalidOperationException();
+        });
+
+        var exception = Record.Exception(() => ActivityHelper.StopAspNetActivity(
+            this.noopTextMapPropagator,
+            rootActivity,
+            context,
+            (_, _) => publicCallbackFired = true));
+
+        Assert.Null(exception);
+        Assert.True(publicCallbackFired);
+        Assert.True(rootActivity.Duration != TimeSpan.Zero);
+        Assert.Null(context.Items[ActivityHelper.ContextKey]);
+        Assert.Null(context.Items[StopInstrumentationCallbackContextKey]);
+    }
+
+    [Fact]
+    public void Should_Handle_Instrumentation_Stop_Callback_Exception_Without_RootActivity()
+    {
+        var context = HttpContextHelper.GetFakeHttpContextBase();
+        using var rootActivity = ActivityHelper.StartAspNetActivity(this.noopTextMapPropagator, context, null);
+
+        Assert.Null(rootActivity);
+        Assert.Equal(ActivityHelper.StartedButNotSampledObj, context.Items[ActivityHelper.ContextKey]);
+
+        context.Items[StopInstrumentationCallbackContextKey] = (Action<Activity?, HttpContextBase>)((_, _) =>
+        {
+            throw new InvalidOperationException();
+        });
+
+        var exception = Record.Exception(() => ActivityHelper.StopAspNetActivity(
+            this.noopTextMapPropagator,
+            rootActivity,
+            context,
+            onRequestStoppedCallback: null));
+
+        Assert.Null(exception);
+        Assert.Null(context.Items[ActivityHelper.ContextKey]);
+        Assert.Null(context.Items[StopInstrumentationCallbackContextKey]);
+    }
+
+    [Fact]
     public void Can_Create_RootActivity_From_W3C_Traceparent()
     {
         this.EnableListener();
@@ -493,7 +609,7 @@ public class ActivityHelperTest : IDisposable
             ShouldListenTo = (activitySource) => activitySource.Name == TestActivitySourceName,
             ActivityStarted = (a) => onStarted?.Invoke(a),
             ActivityStopped = (a) => onStopped?.Invoke(a),
-            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
+            Sample = (ref options) =>
             {
                 return onSample?.Invoke(options.Parent) ?? ActivitySamplingResult.AllDataAndRecorded;
             },
@@ -503,76 +619,44 @@ public class ActivityHelperTest : IDisposable
     }
 
     private Activity? StartTestActivity(HttpContextBase httpContext, ActivityContext activityContext)
+        => this.testActivitySource.StartActivity(ActivityKind.Server, activityContext);
+
+    private Activity? StartTestActivityWithBaggageAttribute(HttpContextBase httpContext, ActivityContext activityContext)
     {
-        return this.testActivitySource.StartActivity(ActivityKind.Server, activityContext);
-    }
-
-    private class TestHttpRequest : HttpRequestBase
-    {
-        private readonly NameValueCollection headers = [];
-
-        public override NameValueCollection Headers => this.headers;
-
-        public override UnvalidatedRequestValuesBase Unvalidated => new TestUnvalidatedRequestValues(this.headers);
-    }
-
-    private class TestUnvalidatedRequestValues : UnvalidatedRequestValuesBase
-    {
-        public TestUnvalidatedRequestValues(NameValueCollection headers)
-        {
-            this.Headers = headers;
-        }
-
-        public override NameValueCollection Headers { get; }
-    }
-
-    private class TestHttpResponse : HttpResponseBase
-    {
-    }
-
-    private class TestHttpServerUtility : HttpServerUtilityBase
-    {
-        private readonly HttpContextBase context;
-
-        public TestHttpServerUtility(HttpContextBase context)
-        {
-            this.context = context;
-        }
-
-        public override Exception GetLastError()
-        {
-            return this.context.Error;
-        }
-    }
-
-    private class TestHttpContext : HttpContextBase
-    {
-        private readonly Hashtable items;
-
-        public TestHttpContext(Exception? error = null)
-        {
-            this.Server = new TestHttpServerUtility(this);
-            this.items = [];
-            this.Error = error;
-        }
-
-        public override HttpRequestBase Request { get; } = new TestHttpRequest();
-
-        /// <inheritdoc />
-        public override IDictionary Items => this.items;
-
-        public override Exception? Error { get; }
-
-        public override HttpServerUtilityBase Server { get; }
+        var baggageValue = Baggage.Current.GetBaggage(MockTextMapPropagator.BaggageKey);
+        var activity = this.testActivitySource.StartActivity(ActivityKind.Server, activityContext);
+        activity?.AddTag(MockTextMapPropagator.BaggageKey, baggageValue);
+        return activity;
     }
 
     private class NoopTextMapPropagator : TextMapPropagator
     {
         public override ISet<string>? Fields => null;
 
+        public override PropagationContext Extract<T>(PropagationContext context, T carrier, Func<T, string, IEnumerable<string>?> getter) => default;
+
+        public override void Inject<T>(PropagationContext context, T carrier, Action<T, string, string> setter)
+        {
+        }
+    }
+
+    private class MockTextMapPropagator : TextMapPropagator
+    {
+        internal const string BaggageKey = "TestKey1";
+        internal const string BaggageValue = "TestValue1";
+
+        public override ISet<string>? Fields => null;
+
         public override PropagationContext Extract<T>(PropagationContext context, T carrier, Func<T, string, IEnumerable<string>?> getter)
         {
-            return default;
+            var baggage = Baggage.Create(new Dictionary<string, string>
+            {
+                { BaggageKey, BaggageValue },
+            });
+
+            var activityContext = new ActivityContext(ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom(), ActivityTraceFlags.Recorded);
+
+            return new PropagationContext(activityContext, baggage);
         }
 
         public override void Inject<T>(PropagationContext context, T carrier, Action<T, string, string> setter)

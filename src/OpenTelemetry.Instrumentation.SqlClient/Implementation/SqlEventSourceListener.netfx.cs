@@ -130,8 +130,6 @@ internal sealed class SqlEventSourceListener : EventListener
             return;
         }
 
-        var options = SqlClientInstrumentation.TracingOptions;
-
         if (eventData.Payload.Count < 4)
         {
             SqlClientInstrumentationEventSource.Log.InvalidPayload(nameof(SqlEventSourceListener), nameof(this.OnBeginExecute));
@@ -140,8 +138,20 @@ internal sealed class SqlEventSourceListener : EventListener
 
         var dataSource = (string)eventData.Payload[1];
         var databaseName = (string)eventData.Payload[2];
-        var startTags = SqlActivitySourceHelper.GetTagListFromConnectionInfo(dataSource, databaseName, out var activityName);
-        var activity = SqlActivitySourceHelper.ActivitySource.StartActivity(
+        var startTags = SqlTelemetryHelper.GetTagListFromConnectionInfo(dataSource, databaseName, out var activityName);
+        var commandText = (string)eventData.Payload[3];
+        if (!string.IsNullOrEmpty(commandText))
+        {
+            var sqlStatementInfo = SqlProcessor.GetSanitizedSql(commandText);
+            startTags.Add(SemanticConventions.AttributeDbQueryText, sqlStatementInfo.SanitizedSql);
+            if (!string.IsNullOrEmpty(sqlStatementInfo.DbQuerySummary))
+            {
+                startTags.Add(SemanticConventions.AttributeDbQuerySummary, sqlStatementInfo.DbQuerySummary);
+                activityName = sqlStatementInfo.DbQuerySummary;
+            }
+        }
+
+        var activity = SqlTelemetryHelper.ActivitySource.StartActivity(
             activityName,
             ActivityKind.Client,
             default(ActivityContext),
@@ -152,21 +162,6 @@ internal sealed class SqlEventSourceListener : EventListener
             // There is no listener or it decided not to sample the current request.
             this.beginTimestamp.Value = Stopwatch.GetTimestamp();
             return;
-        }
-
-        if (activity.IsAllDataRequested)
-        {
-            var commandText = (string)eventData.Payload[3];
-            if (!string.IsNullOrEmpty(commandText))
-            {
-                var sqlStatementInfo = SqlProcessor.GetSanitizedSql(commandText);
-                activity.SetTag(SemanticConventions.AttributeDbQueryText, sqlStatementInfo.SanitizedSql);
-                if (!string.IsNullOrEmpty(sqlStatementInfo.DbQuerySummary))
-                {
-                    activity.SetTag(SemanticConventions.AttributeDbQuerySummary, sqlStatementInfo.DbQuerySummary);
-                    activity.DisplayName = sqlStatementInfo.DbQuerySummary;
-                }
-            }
         }
     }
 
@@ -197,7 +192,7 @@ internal sealed class SqlEventSourceListener : EventListener
         // Ensure any activity that may exist due to ActivitySource.AddActivityListener()
         // is stopped regardless of whether we're doing metrics and/or tracing.
         // See https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/3033.
-        var sqlActivity = currentActivity?.Source == SqlActivitySourceHelper.ActivitySource ? currentActivity : null;
+        var sqlActivity = currentActivity?.Source == SqlTelemetryHelper.ActivitySource ? currentActivity : null;
 
         // If we're only collecting metrics, then we don't want to modify the activity
         var traceActivity =
@@ -245,7 +240,7 @@ internal sealed class SqlEventSourceListener : EventListener
 
         if (activity != null && activity.IsAllDataRequested)
         {
-            foreach (var name in SqlActivitySourceHelper.SharedTagNames)
+            foreach (var name in SqlTelemetryHelper.SharedTagNames)
             {
                 var value = activity.GetTagItem(name);
                 if (value != null)
@@ -256,7 +251,7 @@ internal sealed class SqlEventSourceListener : EventListener
         }
         else
         {
-            tags.Add(SemanticConventions.AttributeDbSystemName, SqlActivitySourceHelper.MicrosoftSqlServerDbSystemName);
+            tags.Add(SemanticConventions.AttributeDbSystemName, SqlTelemetryHelper.MicrosoftSqlServerDbSystemName);
 
             var (hasError, errorNumber, exceptionType) = ExtractErrorFromEvent(eventData);
 
@@ -271,8 +266,8 @@ internal sealed class SqlEventSourceListener : EventListener
         }
 
         var duration = activity?.Duration.TotalSeconds
-            ?? SqlActivitySourceHelper.CalculateDurationFromTimestamp(this.beginTimestamp.Value);
-        SqlActivitySourceHelper.DbClientOperationDuration.Record(duration, tags);
+            ?? SqlTelemetryHelper.CalculateDurationFromTimestamp(this.beginTimestamp.Value);
+        SqlTelemetryHelper.DbClientOperationDuration.Record(duration, tags);
     }
 }
 #endif

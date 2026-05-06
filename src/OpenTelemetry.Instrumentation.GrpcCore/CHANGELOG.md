@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+* **BREAKING**: Update to version 1.41.0 of the Semantic Conventions.
+  ([#4338](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4338))
+
+* Add instrumentation scope version and schema URL to traces.
+  ([#4338](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4338))
+
+## 1.0.0-beta.11
+
+Released 2026-Apr-21
+
+* Fixed `RecordMessageEvents` to skip message-event emission for custom-marshalled
+  payloads that do not implement `Google.Protobuf.IMessage`.
+  ([#4141](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4141))
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.0.0-beta.10
+
+Released 2026-Feb-16
+
+* Update minimum supported version of `Google.Protobuf` to `3.33.2`
+  for native AoT compatibility.
+  ([#3845](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3845))
+
+## 1.0.0-beta.9
+
+Released 2026-Jan-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
+
 ## 1.0.0-beta.8
 
 Released 2025-Nov-13

@@ -5,6 +5,7 @@ using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Exporter.Geneva.MsgPack;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Resources;
 
 /*
 BenchmarkDotNet v0.13.10, Windows 11 (10.0.23424.1000)
@@ -29,6 +30,8 @@ Intel Core i7-9700 CPU 3.00GHz, 1 CPU, 8 logical and 8 physical cores
 */
 
 namespace OpenTelemetry.Exporter.Geneva.Benchmarks;
+
+#pragma warning disable CA1873 // Avoid potentially expensive logging
 
 [MemoryDiagnoser]
 public class LogExporterBenchmarks
@@ -74,23 +77,23 @@ public class LogExporterBenchmarks
         // For msgpack serialization + export
         this.logRecord = GenerateTestLogRecord();
         this.batch = GenerateTestLogRecordBatch();
-        this.exporter = new MsgPackLogExporter(new GenevaExporterOptions
-        {
-            ConnectionString = "EtwSession=OpenTelemetry",
-            PrepopulatedFields = new Dictionary<string, object>
+        this.exporter = new MsgPackLogExporter(
+            new GenevaExporterOptions
             {
-                ["cloud.role"] = "BusyWorker",
-                ["cloud.roleInstance"] = "CY1SCH030021417",
-                ["cloud.roleVer"] = "9.0.15289.2",
+                ConnectionString = "EtwSession=OpenTelemetry",
+                PrepopulatedFields = new Dictionary<string, object>
+                {
+                    ["cloud.role"] = "BusyWorker",
+                    ["cloud.roleInstance"] = "CY1SCH030021417",
+                    ["cloud.roleVer"] = "9.0.15289.2",
+                },
             },
-        });
+            () => Resource.Empty);
     }
 
     [Benchmark]
     public void LoggerWithMessageTemplate()
-    {
-        this.logger.LogInformation("Hello from {Food} {Price}.", "artichoke", 3.99);
-    }
+        => this.logger.LogInformation("Hello from {Food} {Price}.", "artichoke", 3.99);
 
     [Benchmark]
     public void LoggerWithDirectLoggerAPI()
@@ -111,21 +114,15 @@ public class LogExporterBenchmarks
 
     [Benchmark]
     public void LoggerWithSourceGenerator()
-    {
-        Food.SayHello(this.logger, "artichoke", 3.99);
-    }
+        => Food.SayHello(this.logger, "artichoke", 3.99);
 
     [Benchmark]
     public void SerializeLogRecord()
-    {
-        this.exporter.SerializeLogRecord(this.logRecord);
-    }
+        => this.exporter.SerializeLogRecord(this.logRecord);
 
     [Benchmark]
     public void Export()
-    {
-        this.exporter.Export(this.batch);
-    }
+        => this.exporter.Export(this.batch);
 
     [GlobalCleanup]
     public void Cleanup()

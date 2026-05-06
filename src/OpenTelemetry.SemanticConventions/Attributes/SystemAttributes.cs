@@ -52,6 +52,16 @@ public static class SystemAttributes
     public const string AttributeSystemFilesystemType = "system.filesystem.type";
 
     /// <summary>
+    /// The Linux HugePages memory state.
+    /// </summary>
+    public const string AttributeSystemMemoryLinuxHugepagesState = "system.memory.linux.hugepages.state";
+
+    /// <summary>
+    /// The Linux Slab memory state.
+    /// </summary>
+    public const string AttributeSystemMemoryLinuxSlabState = "system.memory.linux.slab.state";
+
+    /// <summary>
     /// The memory state.
     /// </summary>
     public const string AttributeSystemMemoryState = "system.memory.state";
@@ -195,6 +205,38 @@ public static class SystemAttributes
     }
 
     /// <summary>
+    /// The Linux HugePages memory state.
+    /// </summary>
+    public static class SystemMemoryLinuxHugepagesStateValues
+    {
+        /// <summary>
+        /// free.
+        /// </summary>
+        public const string Free = "free";
+
+        /// <summary>
+        /// used.
+        /// </summary>
+        public const string Used = "used";
+    }
+
+    /// <summary>
+    /// The Linux Slab memory state.
+    /// </summary>
+    public static class SystemMemoryLinuxSlabStateValues
+    {
+        /// <summary>
+        /// reclaimable.
+        /// </summary>
+        public const string Reclaimable = "reclaimable";
+
+        /// <summary>
+        /// unreclaimable.
+        /// </summary>
+        public const string Unreclaimable = "unreclaimable";
+    }
+
+    /// <summary>
     /// The memory state.
     /// </summary>
     public static class SystemMemoryStateValues
@@ -212,7 +254,7 @@ public static class SystemAttributes
         /// <summary>
         /// shared.
         /// </summary>
-        [Obsolete("Removed, report shared memory usage with <c>metric.system.memory.shared</c> metric.")]
+        [Obsolete("Removed, report shared memory usage with <c>metric.system.memory.linux.shared</c> metric.")]
         public const string Shared = "shared";
 
         /// <summary>

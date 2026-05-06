@@ -3,7 +3,6 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Reflection;
 using OpenTelemetry.Instrumentation.StackExchangeRedis.Implementation;
 using OpenTelemetry.Internal;
 using OpenTelemetry.Trace;
@@ -18,10 +17,17 @@ namespace OpenTelemetry.Instrumentation.StackExchangeRedis;
 internal sealed class StackExchangeRedisConnectionInstrumentation : IDisposable
 {
     internal const string RedisDatabaseIndexKeyName = "db.redis.database_index";
-    internal static readonly Assembly Assembly = typeof(StackExchangeRedisConnectionInstrumentation).Assembly;
-    internal static readonly string ActivitySourceName = Assembly.GetName().Name!;
-    internal static readonly string ActivityName = ActivitySourceName + ".Execute";
-    internal static readonly ActivitySource ActivitySource = new(ActivitySourceName, Assembly.GetPackageVersion());
+
+    internal static readonly Version SemanticConventionsVersion = new(1, 23, 0);
+    internal static readonly ActivitySource ActivitySource = ActivitySourceFactory.Create<StackExchangeRedisConnectionInstrumentation>(SemanticConventionsVersion);
+
+    internal static readonly Version SemanticConventionsVersionNew = new(1, 28, 0);
+    internal static readonly ActivitySource ActivitySourceNew = ActivitySourceFactory.Create<StackExchangeRedisConnectionInstrumentation>(SemanticConventionsVersionNew);
+
+    internal static readonly ActivitySource ActivitySourceBoth = ActivitySourceFactory.Create<StackExchangeRedisConnectionInstrumentation>(null);
+
+    internal static readonly string ActivityName = $"{ActivitySource.Name}.Execute";
+
     internal static readonly IEnumerable<KeyValuePair<string, object?>> OldCreationTags =
     [
         new(SemanticConventions.AttributeDbSystem, "redis")
@@ -70,34 +76,31 @@ internal sealed class StackExchangeRedisConnectionInstrumentation : IDisposable
     /// Returns session for the Redis calls recording.
     /// </summary>
     /// <returns>Session associated with the current span context to record Redis calls.</returns>
-    public Func<ProfilingSession?> GetProfilerSessionsFactory()
+    public Func<ProfilingSession?> GetProfilerSessionsFactory() => () =>
     {
-        return () =>
+        if (this.stopHandle.WaitOne(0))
         {
-            if (this.stopHandle.WaitOne(0))
-            {
-                return null;
-            }
+            return null;
+        }
 
-            var parent = Activity.Current;
+        var parent = Activity.Current;
 
-            // If no parent use the default session.
-            if (parent == null || parent.IdFormat != ActivityIdFormat.W3C)
-            {
-                return this.defaultSession;
-            }
+        // If no parent use the default session.
+        if (parent == null || parent.IdFormat != ActivityIdFormat.W3C)
+        {
+            return this.defaultSession;
+        }
 
-            // Try to reuse a session for all activities created under the same TraceId+SpanId.
-            var cacheKey = (parent.TraceId, parent.SpanId);
-            if (!this.Cache.TryGetValue(cacheKey, out var session))
-            {
-                session = (parent, new ProfilingSession());
-                this.Cache.TryAdd(cacheKey, session);
-            }
+        // Try to reuse a session for all activities created under the same TraceId+SpanId.
+        var cacheKey = (parent.TraceId, parent.SpanId);
+        if (!this.Cache.TryGetValue(cacheKey, out var session))
+        {
+            session = (parent, new ProfilingSession());
+            this.Cache.TryAdd(cacheKey, session);
+        }
 
-            return session.Session;
-        };
-    }
+        return session.Session;
+    };
 
     /// <inheritdoc/>
     public void Dispose()

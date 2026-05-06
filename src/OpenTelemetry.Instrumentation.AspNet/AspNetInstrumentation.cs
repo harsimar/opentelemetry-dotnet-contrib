@@ -3,25 +3,22 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Reflection;
 using OpenTelemetry.Instrumentation.AspNet.Implementation;
-using OpenTelemetry.Internal;
+using OpenTelemetry.Trace;
 
 namespace OpenTelemetry.Instrumentation.AspNet;
 
 /// <summary>
-/// Asp.Net Requests instrumentation.
+/// ASP.NET Requests instrumentation.
 /// </summary>
 internal sealed class AspNetInstrumentation : IDisposable
 {
     public static readonly AspNetInstrumentation Instance = new();
 
-    public static readonly Assembly Assembly = typeof(HttpInListener).Assembly;
-    public static readonly AssemblyName AssemblyName = Assembly.GetName();
-    public static readonly string MeterName = AssemblyName.Name!;
-    public static readonly string ActivitySourceName = AssemblyName.Name;
-    public static readonly Meter Meter = new(MeterName, Assembly.GetPackageVersion());
-    public static readonly ActivitySource ActivitySource = new(ActivitySourceName, Assembly.GetPackageVersion());
+    public static readonly Version SemanticConventionsVersion = new(1, 36, 0);
+    public static readonly ActivitySource ActivitySource = ActivitySourceFactory.Create<AspNetInstrumentation>(SemanticConventionsVersion);
+    public static readonly Meter Meter = Metrics.MeterFactory.Create<AspNetInstrumentation>(SemanticConventionsVersion);
+
     public static readonly Histogram<double> HttpServerDuration = Meter.CreateHistogram(
         "http.server.request.duration",
         unit: "s",
@@ -45,7 +42,5 @@ internal sealed class AspNetInstrumentation : IDisposable
 
     /// <inheritdoc/>
     public void Dispose()
-    {
-        this.httpInListener?.Dispose();
-    }
+        => this.httpInListener?.Dispose();
 }

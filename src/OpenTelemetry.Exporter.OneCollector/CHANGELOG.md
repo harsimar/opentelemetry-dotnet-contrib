@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 1.15.1
+
+Released 2026-Apr-21
+
+* Limit how much of the response body is read when export fails using the HTTP
+  JSON transport and informational logging is enabled to resolve
+  [GHSA-55m9-299j-53c7](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/security/advisories/GHSA-55m9-299j-53c7).
+  ([#4117](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4117))
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.15.0
+
+Released 2026-Jan-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
+
 ## 1.14.0
 
 Released 2025-Nov-13

@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+* Fixed `OnRequestStoppedCallback` invocation when no root `Activity` was
+  created.
+  ([#4307](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4307))
+
+* Fixed internal request stop instrumentation callback exception handling so
+  telemetry processing failures do not escape request stop processing.
+  ([#4344](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4344))
+
+## 1.15.2
+
+Released 2026-Apr-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.3`.
+  ([#4166](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/4166))
+
+## 1.15.1
+
+Released 2026-Jan-28
+
+* Propagate baggage before `Activity` is created.
+  ([#3820](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3820))
+
+## 1.15.0
+
+Released 2026-Jan-21
+
+* Updated OpenTelemetry core component version(s) to `1.15.0`.
+  ([#3721](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/3721))
+
 ## 1.14.0
 
 Released 2025-Nov-27
