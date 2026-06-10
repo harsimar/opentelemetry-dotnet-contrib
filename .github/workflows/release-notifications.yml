@@ -150,7 +150,7 @@ jobs:
             fi
 
             RELEASES=$(gh api "repos/${REPO}/releases?per_page=100" \
-              --jq "[.[] | select(.draft == false and .prerelease == false and .published_at > \"${EFFECTIVE_CUTOFF}\")]")
+              --jq "[.[] | select(.draft == false and .published_at > \"${EFFECTIVE_CUTOFF}\")]")
 
             COUNT=$(echo "$RELEASES" | jq 'length')
             echo "  Found ${COUNT} release(s) since ${EFFECTIVE_CUTOFF}"
