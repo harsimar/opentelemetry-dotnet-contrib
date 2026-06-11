@@ -85,12 +85,15 @@ jobs:
             fi
           }
 
-          # ── Helper: create a GitHub issue and immediately close it ──
+          # ── Helper: create a GitHub issue to notify about a release ──
           notify_via_issue() {
             local repo="$1" tag="$2" url="$3" published="$4"
 
+            local owner
+            owner=$(echo "${{ github.repository }}" | cut -d'/' -f1)
+
             local title="🚀 New Release: ${tag}"
-            local body="A new release was published that matches your watch list.
+            local body="@${owner} A new release was published that matches your watch list.
 
           | Field | Value |
           |-------|-------|
@@ -108,15 +111,7 @@ jobs:
               -f "labels[]=release-notification" \
               --jq '.number')
 
-            echo "  Created issue #${issue_number}"
-
-            gh api \
-              -X PATCH \
-              "repos/${{ github.repository }}/issues/${issue_number}" \
-              -f "state=closed" \
-              -f "state_reason=completed" > /dev/null
-
-            echo "  ✅ Issue #${issue_number} created and closed for ${tag}"
+            echo "  ✅ Issue #${issue_number} created for ${tag}"
           }
 
           # ── Configuration: repos and tag patterns to watch ──
