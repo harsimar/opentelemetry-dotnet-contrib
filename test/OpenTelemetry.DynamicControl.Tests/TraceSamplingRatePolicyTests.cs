@@ -1,0 +1,114 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+using OpenTelemetry.DynamicControl.Internal.Policies;
+
+namespace OpenTelemetry.DynamicControl.Tests;
+
+public class TraceSamplingRatePolicyTests
+{
+    public static TheoryData<double> ValidSamplingProbabilities =>
+    [
+        0,
+        0.5,
+        1,
+    ];
+
+    public static TheoryData<double> InvalidSamplingProbabilities =>
+    [
+        -double.Epsilon,
+        1.0000000000000002,
+        double.NaN,
+        double.NegativeInfinity,
+        double.PositiveInfinity,
+    ];
+
+    [Theory]
+    [MemberData(nameof(ValidSamplingProbabilities))]
+    public void TryCreate_WithValidInputs_ReturnsTrue(double samplingProbability)
+    {
+        var succeeded = TraceSamplingRatePolicy.TryCreate(
+            new PolicyId("policy-id"),
+            "Policy name",
+            samplingProbability,
+            out var policy,
+            out var error);
+
+        Assert.True(succeeded);
+        Assert.NotNull(policy);
+        Assert.Null(error);
+        Assert.Equal(new PolicyId("policy-id"), policy.Id);
+        Assert.Equal("Policy name", policy.Name);
+        Assert.Equal(samplingProbability, policy.SamplingProbability);
+        Assert.Equal(TraceSamplingRatePolicy.PolicyTypeValue, policy.PolicyType);
+    }
+
+    [Fact]
+    public void TryCreate_WithNegativeZero_NormalizesToPositiveZero()
+    {
+        var succeeded = TraceSamplingRatePolicy.TryCreate(
+            new PolicyId("policy-id"),
+            "Policy name",
+            -0.0,
+            out var policy,
+            out _);
+
+        Assert.True(succeeded);
+        Assert.NotNull(policy);
+        Assert.False(BitConverter.DoubleToInt64Bits(policy.SamplingProbability) < 0);
+        Assert.Equal(0.0, policy.SamplingProbability);
+    }
+
+    [Fact]
+    public void TryCreate_WithEmptyId_ReturnsFalse() =>
+        AssertInvalid(PolicyId.Empty, "Policy name", 0.5, "policy ID is required");
+
+    [Fact]
+    public void TryCreate_WithNullName_ReturnsFalse() =>
+        AssertInvalid(new PolicyId("policy-id"), null!, 0.5, "policy name is required");
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void TryCreate_WithEmptyOrWhitespaceName_ReturnsFalse(string name) =>
+        AssertInvalid(new PolicyId("policy-id"), name, 0.5, "policy name is required");
+
+    [Theory]
+    [MemberData(nameof(InvalidSamplingProbabilities))]
+    public void TryCreate_WithInvalidSamplingProbability_ReturnsFalse(double samplingProbability) =>
+        AssertInvalid(new PolicyId("policy-id"), "Policy name", samplingProbability, "sampling probability");
+
+    [Fact]
+    public void TryCreate_WithMultipleInvalidFields_ReportsFirstError()
+    {
+        // id is validated before name; the id error wins
+        var succeeded = TraceSamplingRatePolicy.TryCreate(
+            PolicyId.Empty,
+            null!,
+            double.NaN,
+            out _,
+            out var error);
+
+        Assert.False(succeeded);
+        Assert.Contains("policy ID is required", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AssertInvalid(
+        PolicyId id,
+        string name,
+        double samplingProbability,
+        string expectedErrorFragment)
+    {
+        var succeeded = TraceSamplingRatePolicy.TryCreate(
+            id,
+            name,
+            samplingProbability,
+            out var policy,
+            out var error);
+
+        Assert.False(succeeded);
+        Assert.Null(policy);
+        Assert.NotNull(error);
+        Assert.Contains(expectedErrorFragment, error, StringComparison.OrdinalIgnoreCase);
+    }
+}
